@@ -136,15 +136,23 @@ CREATE TABLE "Convite" (
 CREATE TABLE "Despesa" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "idPropriedade" INTEGER NOT NULL,
+    "criadoPorId" INTEGER NOT NULL,
     "descricao" TEXT NOT NULL,
     "valor" REAL NOT NULL,
     "dataVencimento" DATETIME NOT NULL,
-    "categoria" TEXT,
+    "categoria" TEXT NOT NULL,
+    "observacao" TEXT,
     "urlComprovante" TEXT,
     "status" TEXT NOT NULL DEFAULT 'PENDENTE',
+    "recorrente" BOOLEAN NOT NULL DEFAULT false,
+    "frequencia" TEXT,
+    "diaRecorrencia" INTEGER,
+    "multaAtraso" REAL,
+    "jurosAtraso" REAL,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "Despesa_idPropriedade_fkey" FOREIGN KEY ("idPropriedade") REFERENCES "Propriedades" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    CONSTRAINT "Despesa_idPropriedade_fkey" FOREIGN KEY ("idPropriedade") REFERENCES "Propriedades" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT "Despesa_criadoPorId_fkey" FOREIGN KEY ("criadoPorId") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 -- CreateTable
