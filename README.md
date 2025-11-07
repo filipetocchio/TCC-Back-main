@@ -40,58 +40,6 @@ O sistema adota uma arquitetura de microsserviços para garantir escalabilidade 
 
 ---
 
-## 🚀 Configuração do Ambiente
-
-Para executar a API localmente, é necessário rodar o **Backend Principal** e o **Microsserviço de OCR** simultaneamente.
-
-### Pré-requisitos
-
--   **Node.js**: `v20.x` ou superior
--   **Python**: `v3.9` ou superior
--   **Git**
--   **Tesseract-OCR**: Essencial para o microsserviço. Deve ser instalado no sistema operacional e adicionado ao `PATH`.
-
-### Instruções de Instalação
-
-1.  **Clone o repositório** e entre na pasta principal.
-
-2.  **Configure o Microsserviço de OCR (Python)**
-    -   Em um terminal, navegue até a pasta `qota-ocr-service`.
-    -   Crie e ative um ambiente virtual.
-    -   Instale as dependências: `pip install -r requirements.txt`
-    -   **Importante:** Abra o arquivo `app.py` e ajuste o caminho para o executável do Tesseract na linha `pytesseract.pytesseract.tesseract_cmd`.
-    -   Inicie o serviço: `python app.py`. Ele rodará na porta `8000`.
-
-3.  **Configure o Backend Principal (Node.js)**
-    -   Em um **novo terminal**, navegue até a pasta `TCC-Back-main`.
-    -   Instale as dependências: `npm install`.
-    -   Crie um arquivo `.env` na raiz de `TCC-Back-main` e configure as variáveis:
-
-    ```env
-    # Porta do servidor backend
-    PORT=8001
-
-    # URL do frontend para CORS
-    ALLOWED_ORIGINS="http://localhost:3000"
-    FRONTEND_URL="http://localhost:3000"
-
-    # Ambiente
-    NODE_ENV="development"
-
-    # Segredos JWT (gere chaves seguras para produção)
-    ACCESS_TOKEN_SECRET="sua_chave_secreta_aqui_1234567890"
-    REFRESH_TOKEN_SECRET="outra_chave_secreta_aqui_0987654321"
-
-    # Banco de dados
-    DATABASE_URL="file:./prisma/dev.db"
-
-    # URL do microsserviço de OCR
-    OCR_SERVICE_URL="http://localhost:8000/processar-documento"
-    ```
-    -   Execute as migrações do Prisma: `npx prisma migrate dev`.
-    -   Inicie o servidor: `npm run dev`. Ele rodará na porta `8001`.
-
----
 
 ## 🗄️ Estrutura do Banco de Dados
 

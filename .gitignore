@@ -1,10 +1,39 @@
+Set-Content .gitignore @"
+# Dependências
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Arquivos de Ambiente (MUITO IMPORTANTE)
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Banco de Dados de Desenvolvimento
+prisma/dev.db
+prisma/dev.db-journal
+
+# Build
+dist/
+
+# Arquivos de Sistema Operacional
+.DS_Store
+Thumbs.db
+"@
+
 node_modules
 dist
 .env
 logs
 prisma/dev.db
 TCC-Back-main/uploads/
-TCC-Front_Web/public/uploads/
 *.pdf
 *.png
 *.jpeg
