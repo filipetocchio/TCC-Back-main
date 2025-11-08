@@ -49,11 +49,18 @@ export const createExpenseWithPayments = async (data: ExpenseCreationData, tx: T
     where: {
       idPropriedade: data.idPropriedade,
       numeroDeFracoes: { gt: 0 },
+
+      usuario: {
+        excludedAt: null,
+      },
     },
+    include: {
+      usuario: true,
+      },
   });
 
   if (cotistas.length === 0) {
-    throw new Error('Não há cotistas com frações definidas para esta propriedade; a despesa não pôde ser criada.');
+    throw new Error('Não há cotistas ativos com frações nesta propriedade para ratear a despesa.');
   }
 
   // --- 3. Lógica de Divisão de Custos baseada em Frações ---
