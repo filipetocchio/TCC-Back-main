@@ -65,7 +65,7 @@ export const acceptInvite = async (req: Request, res: Response) => {
         throw new Error(`O proprietário que enviou o convite não possui frações suficientes (${masterLink.numeroDeFracoes}) para ceder.`);
       }
 
-// 2.3. Lógica de Saldo de Diárias (Corrigida)
+     // 2.3. Lógica de Saldo de Diárias 
       const hoje = new Date();
       const inicioDoAno = new Date(hoje.getFullYear(), 0, 1);
       const fimDoAno = new Date(hoje.getFullYear(), 11, 31);
@@ -81,24 +81,46 @@ export const acceptInvite = async (req: Request, res: Response) => {
 
       // 2.4. Transferência de Frações e Recálculo de Saldos
       // O master tem seu saldo atual debitado pelo valor anual total das frações cedidas.
-      await tx.usuariosPropriedades.update({
-        where: { id: masterLink.id },
-        data: { 
-            numeroDeFracoes: { decrement: convite.numeroDeFracoes },
-            saldoDiariasAtual: { decrement: saldoAnualTransferido },
-        },
-      });
+      const todosMembros = await tx.usuariosPropriedades.findMany({ where: { idPropriedade: convite.idPropriedade } });
+      const somaAtualFracoes = todosMembros.reduce((acc, membro) => acc + membro.numeroDeFracoes, 0);
+      
+      // Se a soma + o novo convite NÃO ultrapassa o limite, as frações vêm do "pool livre".
+      // O master (administrador) não é afetado.
+      if (somaAtualFracoes + convite.numeroDeFracoes <= convite.propriedade.totalFracoes) {
+        
+        // Ação: Apenas cria o novo cotista. O master não é debitado.
+        await tx.usuariosPropriedades.create({
+          data: {
+            idUsuario: idUsuarioLogado, idPropriedade: convite.idPropriedade,
+            permissao: convite.permissao, numeroDeFracoes: convite.numeroDeFracoes,
+            saldoDiariasAtual: saldoProRataNovoMembro,
+            saldoDiariasFuturo: saldoAnualTransferido,
+          },
+        });
+        
+      } else {
+        // Se a soma ultrapassa o limite, as frações DEVEM vir do master (transferência). 
 
-      // 2.5. Criação do Vínculo do Novo Membro com o Saldo Pro-Rata
-      await tx.usuariosPropriedades.create({
-        data: {
-          idUsuario: idUsuarioLogado, idPropriedade: convite.idPropriedade,
-          permissao: convite.permissao, numeroDeFracoes: convite.numeroDeFracoes,
-          saldoDiariasAtual: saldoProRataNovoMembro,
-        },
-      });
+        // Ação: Debita o master E cria o novo cotista.
+        await tx.usuariosPropriedades.update({
+          where: { id: masterLink.id },
+          data: { 
+              numeroDeFracoes: { decrement: convite.numeroDeFracoes },
+              saldoDiariasAtual: { decrement: saldoAnualTransferido },
+          },
+        });
 
-      // 2.6. Finalização do Convite
+        await tx.usuariosPropriedades.create({
+          data: {
+            idUsuario: idUsuarioLogado, idPropriedade: convite.idPropriedade,
+            permissao: convite.permissao, numeroDeFracoes: convite.numeroDeFracoes,
+            saldoDiariasAtual: saldoProRataNovoMembro, // Saldo pro-rata para o ano corrente
+            saldoDiariasFuturo: saldoAnualTransferido, // Saldo integral para o próximo ano 
+          },
+        });
+      }
+
+      // 2.5. Finalização do Convite
       await tx.convite.update({
         where: { id: convite.id },
         data: { status: 'ACEITO', aceitoEm: new Date() },

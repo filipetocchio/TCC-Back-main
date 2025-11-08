@@ -63,10 +63,11 @@ export const runResetDailyBalancesJob = async () => {
       const updatePromises = vinculosParaAtualizar.map(vinculo => {
         // Calcula o novo saldo anual completo para o cotista.
         const novoSaldoAnual = vinculo.numeroDeFracoes * vinculo.propriedade.diariasPorFracao;
+        const novoSaldoFuturo = vinculo.numeroDeFracoes * vinculo.propriedade.diariasPorFracao;
         
         return tx.usuariosPropriedades.update({
           where: { id: vinculo.id },
-          data: { saldoDiariasAtual: novoSaldoAnual },
+          data: { saldoDiariasAtual: novoSaldoAnual, saldoDiariasFuturo: novoSaldoFuturo, },
         });
       });
 

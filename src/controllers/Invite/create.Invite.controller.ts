@@ -9,10 +9,9 @@
  *
  * O processo é seguro e executa uma série de validações críticas:
  * 1.  Autorização: Garante que apenas um proprietário master da propriedade pode enviar convites.
- * 2.  Validade das Frações: Verifica se o master possui frações suficientes para ceder.
- * 3.  Integridade da Propriedade: Garante que o convite não fará com que o total de
- * frações distribuídas exceda o limite da propriedade.
- * 4.  Duplicidade: Impede o envio de um convite para um usuário que já é membro.
+ * 2.  Validade das Frações: Verifica se as frações do convite podem ser cobertas
+ * pelo "pool" de frações livres da propriedade ou pelas frações pessoais do master.
+ * 3.  Duplicidade: Impede o envio de um convite para um usuário que já é membro.
  */
 import { prisma } from '../../utils/prisma';
 import { Request, Response } from 'express';
@@ -47,7 +46,7 @@ export const createInvite = async (req: Request, res: Response) => {
     const { emailConvidado, idPropriedade, permissao, numeroDeFracoes } =
       createInviteSchema.parse(req.body);
 
-// --- 2. Verificação de Autorização e Frações (Segurança) ---
+    // --- 2. Verificação de Autorização (Segurança) ---
     const masterLink = await prisma.usuariosPropriedades.findFirst({
       where: { idUsuario: idConvidadoPor, idPropriedade, permissao: 'proprietario_master' },
       include: { propriedade: true },
@@ -58,12 +57,30 @@ export const createInvite = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'Acesso negado: Apenas proprietários master podem enviar convites.' });
     }
     
-    // Garante que o master possui as frações que deseja ceder.
-    if (masterLink.numeroDeFracoes < numeroDeFracoes) {
-      return res.status(400).json({ success: false, message: `Você não pode ceder ${numeroDeFracoes} frações pois possui apenas ${masterLink.numeroDeFracoes}.` });
+    // --- 3. Lógica de Validação de Frações ---
+    // O sistema verifica se as frações podem sair do "pool" da propriedade
+    // OU do "pool pessoal" do master.
+
+    // 3.1. Calcula as frações livres da propriedade.
+    const todosMembros = await prisma.usuariosPropriedades.findMany({ where: { idPropriedade } });
+    const somaAtualFracoes = todosMembros.reduce((acc, membro) => acc + membro.numeroDeFracoes, 0);
+    const fracoesLivres = masterLink.propriedade.totalFracoes - somaAtualFracoes;
+
+    // 3.2. Verifica se as frações do convite cabem no pool da propriedade.
+    const cabeNoPoolDaPropriedade = numeroDeFracoes <= fracoesLivres;
+    
+    // 3.3. Verifica se o master pode cobrir com suas frações pessoais.
+    const masterPodeCobrir = masterLink.numeroDeFracoes >= numeroDeFracoes;
+
+    // 3.4. Se não couber em nenhum dos dois, bloqueia.
+    if (!cabeNoPoolDaPropriedade && !masterPodeCobrir) {
+        return res.status(400).json({ 
+            success: false, 
+            message: `Não é possível criar este convite. A propriedade não possui ${numeroDeFracoes} frações livres e você não possui frações suficientes para ceder.` 
+        });
     }
 
-    // --- 3. Verificação de Vínculo Existente ---
+    // --- 4. Verificação de Vínculo Existente ---
     const invitedUserExists = await prisma.user.findUnique({ where: { email: emailConvidado } });
     if (invitedUserExists) {
       const isAlreadyMember = await prisma.usuariosPropriedades.findFirst({
@@ -74,12 +91,12 @@ export const createInvite = async (req: Request, res: Response) => {
       }
     }
 
-    // --- 4. Geração do Token e Definição da Validade ---
+    // --- 5. Geração do Token e Definição da Validade ---
     const token = randomBytes(32).toString('hex');
     const dataExpiracao = new Date();
     dataExpiracao.setDate(dataExpiracao.getDate() + INVITE_EXPIRATION_DAYS);
 
-    // --- 5. Criação do Registro do Convite ---
+    // --- 6. Criação do Registro do Convite ---
     const convite = await prisma.convite.create({
       data: {
         token, emailConvidado, idPropriedade, idConvidadoPor,
@@ -87,7 +104,7 @@ export const createInvite = async (req: Request, res: Response) => {
       },
     });
 
-    // --- 6. Disparo de Notificação (Desempenho) ---
+    // --- 7. Disparo de Notificação (Fire-and-Forget) ---
     const linkConvite = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/convite/${convite.token}`;
     
     createNotification({
@@ -96,12 +113,13 @@ export const createInvite = async (req: Request, res: Response) => {
         mensagem: `Um convite para se juntar à propriedade '${masterLink.propriedade.nomePropriedade}' foi enviado para ${emailConvidado} por '${nomeConvidante}'.`
     }).catch(err => logEvents(`Falha ao criar notificação para novo convite: ${err.message}`, LOG_FILE));
     
-    // --- 7. Envio da Resposta de Sucesso ---
+    // --- 8. Envio da Resposta de Sucesso ---
     return res.status(201).json({
       success: true,
       message: `Convite criado com sucesso para ${emailConvidado}.`,
       data: { linkConvite },
     });
+
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ success: false, message: error.issues[0].message });

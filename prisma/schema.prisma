@@ -151,7 +151,7 @@ model UsuariosPropriedades {
   dataVinculo     DateTime   @default(now())
   numeroDeFracoes Int        @default(0) // Um valor '0' indica um administrador sem direito a cota.
   saldoDiariasAtual Float    @default(0.0)
-
+  saldoDiariasFuturo Float   @default(0.0)
   // --- Relacionamentos
   usuario         User         @relation(fields: [idUsuario], references: [id])
   propriedade     Propriedades  @relation(fields: [idPropriedade], references: [id])
