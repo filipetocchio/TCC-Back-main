@@ -27,14 +27,14 @@ FRONTEND_URL="http://localhost:3000"
 # Ambiente de execução
 NODE_ENV="development"
 
-# Segredos para tokens JWT (use valores seguros)
+# Segredos para tokens JWT 
 ACCESS_TOKEN_SECRET="chave_secreta_para_access_token_qota"
 REFRESH_TOKEN_SECRET="chave_secreta_para_refresh_token_qota"
 
 # URL do banco de dados (SQLite para dev)
 DATABASE_URL="file:./prisma/dev.db"
 
-# URL do microsserviço de OCR que acabamos de iniciar
+# URL do microsserviço de OCR 
 OCR_SERVICE_URL="http://localhost:8000/processar-documento"
 ```
 
