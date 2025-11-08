@@ -47,27 +47,23 @@ export const createInvite = async (req: Request, res: Response) => {
     const { emailConvidado, idPropriedade, permissao, numeroDeFracoes } =
       createInviteSchema.parse(req.body);
 
-    // --- 2. Verificação de Autorização e Frações (Segurança) ---
+// --- 2. Verificação de Autorização e Frações (Segurança) ---
     const masterLink = await prisma.usuariosPropriedades.findFirst({
       where: { idUsuario: idConvidadoPor, idPropriedade, permissao: 'proprietario_master' },
       include: { propriedade: true },
     });
 
+    // Garante que o usuário que convida é um master
     if (!masterLink) {
       return res.status(403).json({ success: false, message: 'Acesso negado: Apenas proprietários master podem enviar convites.' });
     }
+    
+    // Garante que o master possui as frações que deseja ceder.
     if (masterLink.numeroDeFracoes < numeroDeFracoes) {
       return res.status(400).json({ success: false, message: `Você não pode ceder ${numeroDeFracoes} frações pois possui apenas ${masterLink.numeroDeFracoes}.` });
     }
 
-    // --- 3. Verificação de Integridade da Propriedade (Segurança) ---
-    const todosMembros = await prisma.usuariosPropriedades.findMany({ where: { idPropriedade } });
-    const somaAtualFracoes = todosMembros.reduce((acc, membro) => acc + membro.numeroDeFracoes, 0);
-    if (somaAtualFracoes + numeroDeFracoes > masterLink.propriedade.totalFracoes) {
-        return res.status(400).json({ success: false, message: `Este convite excede o número total de frações da propriedade. Frações disponíveis: ${masterLink.propriedade.totalFracoes - somaAtualFracoes}` });
-    }
-
-    // --- 4. Verificação de Vínculo Existente ---
+    // --- 3. Verificação de Vínculo Existente ---
     const invitedUserExists = await prisma.user.findUnique({ where: { email: emailConvidado } });
     if (invitedUserExists) {
       const isAlreadyMember = await prisma.usuariosPropriedades.findFirst({
@@ -78,12 +74,12 @@ export const createInvite = async (req: Request, res: Response) => {
       }
     }
 
-    // --- 5. Geração do Token e Definição da Validade ---
+    // --- 4. Geração do Token e Definição da Validade ---
     const token = randomBytes(32).toString('hex');
     const dataExpiracao = new Date();
     dataExpiracao.setDate(dataExpiracao.getDate() + INVITE_EXPIRATION_DAYS);
 
-    // --- 6. Criação do Registro do Convite ---
+    // --- 5. Criação do Registro do Convite ---
     const convite = await prisma.convite.create({
       data: {
         token, emailConvidado, idPropriedade, idConvidadoPor,
@@ -91,7 +87,7 @@ export const createInvite = async (req: Request, res: Response) => {
       },
     });
 
-    // --- 7. Disparo de Notificação (Desempenho) ---
+    // --- 6. Disparo de Notificação (Desempenho) ---
     const linkConvite = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/convite/${convite.token}`;
     
     createNotification({
@@ -100,7 +96,7 @@ export const createInvite = async (req: Request, res: Response) => {
         mensagem: `Um convite para se juntar à propriedade '${masterLink.propriedade.nomePropriedade}' foi enviado para ${emailConvidado} por '${nomeConvidante}'.`
     }).catch(err => logEvents(`Falha ao criar notificação para novo convite: ${err.message}`, LOG_FILE));
     
-    // --- 8. Envio da Resposta de Sucesso ---
+    // --- 7. Envio da Resposta de Sucesso ---
     return res.status(201).json({
       success: true,
       message: `Convite criado com sucesso para ${emailConvidado}.`,
