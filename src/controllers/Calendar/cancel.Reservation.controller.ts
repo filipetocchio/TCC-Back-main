@@ -88,9 +88,22 @@ export const cancelReservation = async (req: Request, res: Response) => {
               where: { idUsuario: reserva.idUsuario, idPropriedade: reserva.idPropriedade }
           });
           if (userLink) {
+             const anoAtual = new Date().getFullYear();
+             const anoDaReserva = reserva.dataInicio.getFullYear();
+
+             let campoSaldo: 'saldoDiariasAtual' | 'saldoDiariasFuturo';
+
+             if (anoDaReserva === anoAtual) {
+                 campoSaldo = 'saldoDiariasAtual';
+             } else if (anoDaReserva === anoAtual + 1) {
+                 campoSaldo = 'saldoDiariasFuturo';
+             } else {
+                 campoSaldo = 'saldoDiariasAtual';
+             }
+
               await tx.usuariosPropriedades.update({
                   where: { id: userLink.id },
-                  data: { saldoDiariasAtual: { increment: durationInDays } }
+                  data: { [campoSaldo]: { increment: durationInDays } }
               });
           }
       }
