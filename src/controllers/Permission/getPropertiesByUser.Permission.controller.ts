@@ -53,7 +53,7 @@ export const getPropertiesByUser = async (req: Request, res: Response) => {
     // --- 2. Verificação de Autorização (Segurança) ---
     // Garante que um usuário só pode listar suas próprias propriedades.
     if (requesterId !== targetUserId) {
-        return res.status(403).json({ success: false, message: 'Acesso negado. Você só pode visualizar sua própria lista de propriedades.' });
+      return res.status(403).json({ success: false, message: 'Acesso negado. Você só pode visualizar sua própria lista de propriedades.' });
     }
 
     // --- 3. Construção da Cláusula de Busca ---
@@ -61,8 +61,8 @@ export const getPropertiesByUser = async (req: Request, res: Response) => {
       showDeleted === 'false'
         ? { excludedAt: null }
         : showDeleted === 'only'
-        ? { excludedAt: { not: null } }
-        : {};
+          ? { excludedAt: { not: null } }
+          : {};
 
     const whereClause = {
       idUsuario: targetUserId,
@@ -91,7 +91,7 @@ export const getPropertiesByUser = async (req: Request, res: Response) => {
     ]);
 
     // --- 5. Formatação dos Dados para a Resposta ---
-    // Mapeia os resultados para um formato limpo, incluindo os novos campos de frações e saldo.
+    // Mapeia os resultados para um formato limpo.
     const formattedProperties = userLinks.map((link) => ({
       id: link.propriedade.id,
       nomePropriedade: link.propriedade.nomePropriedade,
@@ -100,6 +100,7 @@ export const getPropertiesByUser = async (req: Request, res: Response) => {
       permissao: link.permissao,
       numeroDeFracoes: link.numeroDeFracoes,
       saldoDiariasAtual: link.saldoDiariasAtual,
+      saldoDiariasFuturo: link.saldoDiariasFuturo, 
     }));
 
     // --- 6. Envio da Resposta Estruturada ---

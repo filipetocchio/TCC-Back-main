@@ -78,7 +78,7 @@ export const updateProperty = async (req: Request, res: Response) => {
       if (!userPermission || userPermission.propriedade.excludedAt) {
         throw new Error('Acesso negado, a propriedade não foi encontrada ou você não tem permissão.');
       }
-      
+
       const { propriedade: currentProperty } = userPermission;
       const dataForPropertyUpdate: Prisma.PropriedadesUpdateInput = { ...dataToUpdate };
 
@@ -96,24 +96,39 @@ export const updateProperty = async (req: Request, res: Response) => {
         // Calcula e inclui o novo valor de diárias por fração na atualização.
         const newDiariasPorFracao = 365 / dataToUpdate.totalFracoes;
         dataForPropertyUpdate.diariasPorFracao = newDiariasPorFracao;
-        
+
         // Busca todos os membros para recalcular seus saldos.
         const members = await tx.usuariosPropriedades.findMany({ where: { idPropriedade: propertyId } });
-        
+
         // Prepara as atualizações de saldo em paralelo para máxima performance.
+
+        // Calcula a proporção do ano restante (lógica pro-rata)
+        const hoje = new Date();
+        const inicioDoAno = new Date(hoje.getFullYear(), 0, 1);
+        const fimDoAno = new Date(hoje.getFullYear(), 11, 31);
+        const diasTotaisNoAno = (fimDoAno.getTime() - inicioDoAno.getTime()) / (1000 * 3600 * 24) + 1;
+        const diasRestantesNoAno = (fimDoAno.getTime() - hoje.getTime()) / (1000 * 3600 * 24) + 1;
+        const proporcaoAnoRestante = diasRestantesNoAno > 0 ? diasRestantesNoAno / diasTotaisNoAno : 0;
+
         const balanceUpdatePromises = members.map(member => {
-          const newBalance = member.numeroDeFracoes * newDiariasPorFracao;
-          
+          // O saldo integral (para o ano futuro)
+          const saldoAnualTotal = member.numeroDeFracoes * newDiariasPorFracao;
+          // O saldo pro-rata (para o ano atual)
+          const saldoProRata = saldoAnualTotal * proporcaoAnoRestante;
+
           return tx.usuariosPropriedades.update({
             where: { id: member.id },
-            data: { saldoDiariasAtual: newBalance },
+            data: {
+              saldoDiariasAtual: saldoProRata,
+              saldoDiariasFuturo: saldoAnualTotal
+            },
           });
         });
-        
+
         // Executa todas as atualizações de saldo.
         await Promise.all(balanceUpdatePromises);
       }
-      
+
       // 2.3. Execução da Atualização Principal da Propriedade
       return tx.propriedades.update({
         where: { id: propertyId },
@@ -143,7 +158,7 @@ export const updateProperty = async (req: Request, res: Response) => {
     if (error instanceof Error) {
       return res.status(400).json({ success: false, message: error.message });
     }
-    
+
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     logEvents(`ERRO ao atualizar propriedade: ${errorMessage}\n${error instanceof Error ? error.stack : ''}`, LOG_FILE);
 

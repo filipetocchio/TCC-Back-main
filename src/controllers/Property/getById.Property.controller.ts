@@ -80,6 +80,7 @@ export const getPropertyById = async (req: Request, res: Response) => {
             permissao: true,
             numeroDeFracoes: true,
             saldoDiariasAtual: true,
+            saldoDiariasFuturo: true,
             usuario: {
               select: {
                 id: true,

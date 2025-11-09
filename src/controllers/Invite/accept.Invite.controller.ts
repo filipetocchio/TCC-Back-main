@@ -106,7 +106,8 @@ export const acceptInvite = async (req: Request, res: Response) => {
           where: { id: masterLink.id },
           data: { 
               numeroDeFracoes: { decrement: convite.numeroDeFracoes },
-              saldoDiariasAtual: { decrement: saldoAnualTransferido },
+              saldoDiariasAtual: { decrement: saldoProRataNovoMembro }, 
+              saldoDiariasFuturo: { decrement: saldoAnualTransferido },
           },
         });
 

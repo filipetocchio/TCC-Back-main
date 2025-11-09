@@ -45,15 +45,15 @@ const paramsSchema = z.object({
  * @returns O saldo de diárias proporcional ao restante do ano.
  */
 const calcularSaldoProRata = (numeroDeFracoes: number, diariasPorFracao: number): number => {
-    const hoje = new Date();
-    const inicioDoAno = new Date(hoje.getFullYear(), 0, 1);
-    const fimDoAno = new Date(hoje.getFullYear(), 11, 31);
-    const diasTotaisNoAno = (fimDoAno.getTime() - inicioDoAno.getTime()) / (1000 * 3600 * 24) + 1;
-    const diasRestantesNoAno = Math.max(0, (fimDoAno.getTime() - hoje.getTime()) / (1000 * 3600 * 24) + 1);
-    const proporcaoAnoRestante = diasRestantesNoAno / diasTotaisNoAno;
-    
-    const saldoAnualTotal = numeroDeFracoes * diariasPorFracao;
-    return saldoAnualTotal * proporcaoAnoRestante;
+  const hoje = new Date();
+  const inicioDoAno = new Date(hoje.getFullYear(), 0, 1);
+  const fimDoAno = new Date(hoje.getFullYear(), 11, 31);
+  const diasTotaisNoAno = (fimDoAno.getTime() - inicioDoAno.getTime()) / (1000 * 3600 * 24) + 1;
+  const diasRestantesNoAno = Math.max(0, (fimDoAno.getTime() - hoje.getTime()) / (1000 * 3600 * 24) + 1);
+  const proporcaoAnoRestante = diasRestantesNoAno / diasTotaisNoAno;
+
+  const saldoAnualTotal = numeroDeFracoes * diariasPorFracao;
+  return saldoAnualTotal * proporcaoAnoRestante;
 };
 
 /**
@@ -89,15 +89,17 @@ export const unlinkUserFromProperty = async (req: Request, res: Response) => {
           orderBy: { createdAt: 'asc' },
         });
         if (!masterReceptor) throw new Error('Operação falhou: não há um proprietário master para receber as frações.');
-        
+
         const novoTotalFracoesMaster = masterReceptor.numeroDeFracoes + numeroDeFracoes;
         const novoSaldoMaster = calcularSaldoProRata(novoTotalFracoesMaster, propriedade.diariasPorFracao);
+        const saldoAnualTotalMaster = novoTotalFracoesMaster * propriedade.diariasPorFracao;
 
         await tx.usuariosPropriedades.update({
           where: { id: masterReceptor.id },
-          data: { 
+          data: {
             numeroDeFracoes: { increment: numeroDeFracoes },
             saldoDiariasAtual: novoSaldoMaster,
+            saldoDiariasFuturo: saldoAnualTotalMaster,
           },
         });
       }
@@ -116,28 +118,30 @@ export const unlinkUserFromProperty = async (req: Request, res: Response) => {
 
         const baseFracoes = Math.floor(numeroDeFracoes / remainingMasters.length);
         let fracoesRestantes = numeroDeFracoes % remainingMasters.length;
-        
-        const updatePromises = remainingMasters.map(master => {
-            const fracoesAdicionais = baseFracoes + (fracoesRestantes > 0 ? 1 : 0);
-            if (fracoesRestantes > 0) fracoesRestantes--;
 
-            const novoTotalFracoes = master.numeroDeFracoes + fracoesAdicionais;
-            const novoSaldo = calcularSaldoProRata(novoTotalFracoes, propriedade.diariasPorFracao);
-            
-            return tx.usuariosPropriedades.update({
-                where: { id: master.id },
-                data: { 
-                    numeroDeFracoes: { increment: fracoesAdicionais },
-                    saldoDiariasAtual: novoSaldo,
-                },
-            });
+        const updatePromises = remainingMasters.map(master => {
+          const fracoesAdicionais = baseFracoes + (fracoesRestantes > 0 ? 1 : 0);
+          if (fracoesRestantes > 0) fracoesRestantes--;
+
+          const novoTotalFracoes = master.numeroDeFracoes + fracoesAdicionais;
+          const novoSaldoProRata = calcularSaldoProRata(novoTotalFracoes, propriedade.diariasPorFracao);
+          const novoSaldoAnualTotal = novoTotalFracoes * propriedade.diariasPorFracao;
+
+          return tx.usuariosPropriedades.update({
+            where: { id: master.id },
+            data: {
+              numeroDeFracoes: { increment: fracoesAdicionais },
+              saldoDiariasAtual: novoSaldoProRata, // Saldo pro-rata
+              saldoDiariasFuturo: novoSaldoAnualTotal, // Saldo integral
+            },
+          });
         });
         await Promise.all(updatePromises);
       }
 
       // 2.4. Remoção Definitiva do Vínculo
       await tx.usuariosPropriedades.delete({ where: { id: vinculoId } });
-      
+
       // Retorna os dados para a notificação.
       return { idPropriedade, nomePropriedade: propriedade.nomePropriedade };
     });
@@ -148,7 +152,7 @@ export const unlinkUserFromProperty = async (req: Request, res: Response) => {
       idAutor: idUsuarioLogado,
       mensagem: `O usuário '${nomeUsuario}' se desvinculou da propriedade '${notificationPayload.nomePropriedade}'.`,
     }).catch(err => {
-        logEvents(`Falha ao criar notificação para desvinculação de usuário: ${err.message}`, LOG_FILE);
+      logEvents(`Falha ao criar notificação para desvinculação de usuário: ${err.message}`, LOG_FILE);
     });
 
     // --- 4. Envio da Resposta de Sucesso ---
@@ -161,10 +165,10 @@ export const unlinkUserFromProperty = async (req: Request, res: Response) => {
     if (error instanceof Error) {
       return res.status(400).json({ success: false, message: error.message });
     }
-    
+
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
     logEvents(`ERRO ao desvincular usuário: ${errorMessage}\n${error instanceof Error ? error.stack : ''}`, LOG_FILE);
-    
+
     return res.status(500).json({
       success: false,
       message: 'Ocorreu um erro inesperado no servidor.',

@@ -99,7 +99,8 @@ export const updateCotaPermission = async (req: Request, res: Response) => {
         where: { id: vinculoAlvo.id },
         data: { 
             numeroDeFracoes: novoNumeroDeFracoes,
-            saldoDiariasAtual: novoSaldoProRata
+            saldoDiariasAtual: novoSaldoProRata,
+            saldoDiariasFuturo: saldoAnualTotal
         },
       });
 

@@ -66,7 +66,8 @@ export const createProperty = async (req: Request, res: Response) => {
               idUsuario: userId,
               permissao: 'proprietario_master',
               numeroDeFracoes: totalFracoes, // O criador recebe todas as frações inicialmente.
-              saldoDiariasAtual: 365,       // Com todas as frações, o criador tem direito a todos os dias.
+              saldoDiariasAtual: 365,        // Com todas as frações, o criador tem direito a todos os dias.
+              saldoDiariasFuturo: 365,       // Saldo integral para o próximo ano.
             },
           ],
         },

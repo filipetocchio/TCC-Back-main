@@ -85,7 +85,8 @@ export const unlinkMemberFromProperty = async (req: Request, res: Response) => {
         where: { id: vinculoMaster.id },
         data: { 
             numeroDeFracoes: { increment: numeroDeFracoes },
-            saldoDiariasAtual: novoSaldoProRataMaster
+            saldoDiariasAtual: novoSaldoProRataMaster,
+            saldoDiariasFuturo: saldoAnualTotalMaster
         },
       });
 

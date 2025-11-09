@@ -96,7 +96,7 @@ export const getUserPropertiesPermission = async (
     ]);
 
     // --- 5. Formatação dos Dados para a Resposta ---
-    // Mapeia os resultados para um formato limpo, incluindo os novos campos de frações e saldo.
+    // Mapeia os resultados para um formato limpo.
     const formattedUsers = userLinks.map((link) => ({
       idVinculo: link.id,
       idUsuario: link.usuario.id,

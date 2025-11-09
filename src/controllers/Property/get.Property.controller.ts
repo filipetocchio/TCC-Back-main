@@ -47,7 +47,7 @@ export const getProperty = async (req: Request, res: Response) => {
 
     // --- 2. Construção da Cláusula de Busca (Segurança e Filtros) ---
     const skip = (page - 1) * limit;
-    
+
     // A cláusula base garante que apenas propriedades às quais o usuário
     // pertence sejam retornadas, aplicando o filtro de segurança principal.
     const where: Prisma.PropriedadesWhereInput = {
@@ -77,7 +77,7 @@ export const getProperty = async (req: Request, res: Response) => {
 
     // Adiciona as condições de filtro à cláusula principal, se existirem.
     if (filterConditions.length > 0) {
-        where.AND = filterConditions;
+      where.AND = filterConditions;
     }
 
     const orderBy = { [sortBy]: sortOrder };
@@ -96,6 +96,15 @@ export const getProperty = async (req: Request, res: Response) => {
           dataCadastro: true,
           // Pega apenas a primeira foto para servir como "foto de capa".
           fotos: { select: { id: true, documento: true }, take: 1 },
+          // Inclui o vínculo do usuário logado para buscar seus saldos e permissão
+          usuarios: {
+            where: { idUsuario: userId },
+            select: {
+              permissao: true,
+              saldoDiariasAtual: true,
+              saldoDiariasFuturo: true,
+            }
+          }
         },
       }),
       prisma.propriedades.count({ where }),
@@ -103,13 +112,21 @@ export const getProperty = async (req: Request, res: Response) => {
 
     // --- 4. Formatação da Resposta e Construção de URLs ---
     const domain = `${req.protocol}://${req.get('host')}`;
-    const formattedProperties = properties.map(prop => ({
+    const formattedProperties = properties.map(prop => {
+      // O 'prop.usuarios'  é um array com [0] ou [1] item (apenas o vínculo do usuário logado)
+      const userLink = prop.usuarios[0];
+
+      return {
         id: prop.id,
         nomePropriedade: prop.nomePropriedade,
         tipo: prop.tipo,
         dataCadastro: prop.dataCadastro,
         imagemPrincipal: prop.fotos[0]?.documento ? `${domain}${prop.fotos[0].documento}` : null,
-    }));
+        permissao: userLink?.permissao,
+        saldoDiariasAtual: userLink?.saldoDiariasAtual,
+        saldoDiariasFuturo: userLink?.saldoDiariasFuturo,
+      };
+    });
 
     // --- 5. Cálculo da Paginação e Envio da Resposta ---
     const totalPages = Math.ceil(total / limit);
