@@ -41,15 +41,15 @@ const mockProperty = {
   totalFracoes: 52,
   diariasPorFracao: 7.019,
   excludedAt: null,
-  usuarios: [ { usuario: { id: masterUser.id } }, { usuario: { id: commonUser.id } } ],
+  usuarios: [{ usuario: { id: masterUser.id } }, { usuario: { id: commonUser.id } }],
 };
 
 const mockMasterPermission = {
-    id: 101,
-    idUsuario: masterUser.id,
-    idPropriedade: mockProperty.id,
-    permissao: 'proprietario_master',
-    propriedade: mockProperty,
+  id: 101,
+  idUsuario: masterUser.id,
+  idPropriedade: mockProperty.id,
+  permissao: 'proprietario_master',
+  propriedade: mockProperty,
 };
 
 // --- Suite Principal de Testes de Propriedades ---
@@ -79,9 +79,16 @@ describe('Endpoints de Propriedades (/api/v1/property)', () => {
       expect(response.body.data.nomePropriedade).toBe('Casa de Praia');
       expect(prismaMock.propriedades.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
-            totalFracoes: 52,
-            diariasPorFracao: 365 / 52,
-            usuarios: { create: [ expect.objectContaining({ numeroDeFracoes: 52, saldoDiariasAtual: 365 }) ] }
+          totalFracoes: 52,
+          diariasPorFracao: 365 / 52,
+          // Testa a  lógica de saldo (pro-rata para o atual, cheio para o futuro)
+          usuarios: {
+            create: [expect.objectContaining({
+              numeroDeFracoes: 52,
+              saldoDiariasAtual: expect.any(Number),
+              saldoDiariasFuturo: 365  // Verifica se o saldo futuro está correto
+            })]
+          }
         })
       }));
       expect(mockedCreateNotification).toHaveBeenCalled();
@@ -100,78 +107,78 @@ describe('Endpoints de Propriedades (/api/v1/property)', () => {
     });
 
     it('PUT /:id: Deve permitir que um master atualize uma propriedade', async () => {
-        // Arrange
-        const updatedPropertyData = { ...mockProperty, nomePropriedade: 'Casa de Campo' };
-        (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback) => {
-            const mockTx = {
-                usuariosPropriedades: { findFirst: jest.fn().mockResolvedValue(mockMasterPermission) },
-                propriedades: { update: jest.fn().mockResolvedValue(updatedPropertyData) }
-            };
-            return await callback(mockTx);
-        });
-  
-        // Act
-        const response = await request(app).put('/api/v1/property/1').send({ nomePropriedade: 'Casa de Campo' });
-  
-        // Assert
-        expect(response.status).toBe(200);
-        expect(response.body.data.nomePropriedade).toBe('Casa de Campo');
+      // Arrange
+      const updatedPropertyData = { ...mockProperty, nomePropriedade: 'Casa de Campo' };
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback) => {
+        const mockTx = {
+          usuariosPropriedades: { findFirst: jest.fn().mockResolvedValue(mockMasterPermission) },
+          propriedades: { update: jest.fn().mockResolvedValue(updatedPropertyData) }
+        };
+        return await callback(mockTx);
+      });
+
+      // Act
+      const response = await request(app).put('/api/v1/property/1').send({ nomePropriedade: 'Casa de Campo' });
+
+      // Assert
+      expect(response.status).toBe(200);
+      expect(response.body.data.nomePropriedade).toBe('Casa de Campo');
     });
   });
 
   // Testes para os cenários de falha de autorização.
   describe('Cenários de Falha de Autorização (Segurança)', () => {
     it('GET /:id: Deve retornar 404 se o usuário não for membro da propriedade', async () => {
-        // Arrange
-        mockedProtect.mockImplementation((req: Request, res: Response, next: NextFunction) => {
-            req.user = { id: 99, email: 'estranho@email.com', nomeCompleto: 'Usuário Estranho' };
-            next();
-        });
-        prismaMock.propriedades.findFirst.mockResolvedValue(null);
+      // Arrange
+      mockedProtect.mockImplementation((req: Request, res: Response, next: NextFunction) => {
+        req.user = { id: 99, email: 'estranho@email.com', nomeCompleto: 'Usuário Estranho' };
+        next();
+      });
+      prismaMock.propriedades.findFirst.mockResolvedValue(null);
 
-        // Act
-        const response = await request(app).get('/api/v1/property/1');
-  
-        // Assert
-        expect(response.status).toBe(404);
-        expect(response.body.message).toContain('não encontrada ou acesso negado');
+      // Act
+      const response = await request(app).get('/api/v1/property/1');
+
+      // Assert
+      expect(response.status).toBe(404);
+      expect(response.body.message).toContain('não encontrada ou acesso negado');
     });
 
     it('PUT /:id: Deve retornar 403 se um cotista comum tentar atualizar uma propriedade', async () => {
-        // Arrange
-        mockedProtect.mockImplementation((req: Request, res: Response, next: NextFunction) => {
-            req.user = commonUser;
-            next();
-        });
-        // Simula a falha na verificação de permissão de master.
-        (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback) => {
-            const mockTx = { usuariosPropriedades: { findFirst: jest.fn().mockResolvedValue(null) } };
-            // A transação irá lançar um erro que o controlador converterá para 403.
-            return await callback(mockTx);
-        });
-        
-        // Act
-        const response = await request(app).put('/api/v1/property/1').send({ nomePropriedade: 'Tentativa de Edição' });
+      // Arrange
+      mockedProtect.mockImplementation((req: Request, res: Response, next: NextFunction) => {
+        req.user = commonUser;
+        next();
+      });
+      // Simula a falha na verificação de permissão de master.
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback) => {
+        const mockTx = { usuariosPropriedades: { findFirst: jest.fn().mockResolvedValue(null) } };
+        // A transação irá lançar um erro que o controlador converterá para 403.
+        return await callback(mockTx);
+      });
 
-        // Assert
-        expect(response.status).toBe(400);
-        expect(response.body.message).toContain('Acesso negado');
+      // Act
+      const response = await request(app).put('/api/v1/property/1').send({ nomePropriedade: 'Tentativa de Edição' });
+
+      // Assert
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain('Acesso negado');
     });
 
     it('DELETE /:id: Deve retornar 403 se um cotista comum tentar excluir uma propriedade', async () => {
-        // Arrange
-        mockedProtect.mockImplementation((req: Request, res: Response, next: NextFunction) => {
-            req.user = commonUser;
-            next();
-        });
-        prismaMock.usuariosPropriedades.findFirst.mockResolvedValue(null);
+      // Arrange
+      mockedProtect.mockImplementation((req: Request, res: Response, next: NextFunction) => {
+        req.user = commonUser;
+        next();
+      });
+      prismaMock.usuariosPropriedades.findFirst.mockResolvedValue(null);
 
-        // Act
-        const response = await request(app).delete('/api/v1/property/1');
+      // Act
+      const response = await request(app).delete('/api/v1/property/1');
 
-        // Assert
-        expect(response.status).toBe(403);
-        expect(response.body.message).toContain('Acesso negado');
+      // Assert
+      expect(response.status).toBe(403);
+      expect(response.body.message).toContain('Acesso negado');
     });
   });
 });
