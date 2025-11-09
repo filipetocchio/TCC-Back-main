@@ -60,31 +60,39 @@ export const runResetDailyBalancesJob = async () => {
     // --- 2. Execução da Atualização em Massa (Transacional e Performático) ---
     await prisma.$transaction(async (tx: TransactionClient) => {
       // Prepara todas as operações de atualização para serem executadas em paralelo.
-      const updatePromises = vinculosParaAtualizar.map(vinculo => {
-        // Calcula o novo saldo anual completo para o cotista.
-        const novoSaldoAnual = vinculo.numeroDeFracoes * vinculo.propriedade.diariasPorFracao;
-        const novoSaldoFuturo = vinculo.numeroDeFracoes * vinculo.propriedade.diariasPorFracao;
-        
+     
+      const updatePromises = vinculosParaAtualizar.map(vinculo => {       
+
+        // 1. O saldo que era 'Futuro' se torna o 'Atual'.
+        //    Nós lemos o valor que já estava no banco (que pode ter sido debitado por reservas futuras).
+        const novoSaldoAtual = vinculo.saldoDiariasFuturo;
+
+        // 2. O novo saldo 'Futuro' (ex: para 2027) é (re)calculado com base nas frações.
+        const novoSaldoFuturoCalculado = vinculo.numeroDeFracoes * vinculo.propriedade.diariasPorFracao;
+
         return tx.usuariosPropriedades.update({
           where: { id: vinculo.id },
-          data: { saldoDiariasAtual: novoSaldoAnual, saldoDiariasFuturo: novoSaldoFuturo, },
+          data: {
+            saldoDiariasAtual: novoSaldoAtual, // O saldo do ano anterior vira o atual
+            saldoDiariasFuturo: novoSaldoFuturoCalculado // O saldo do próximo ano é calculado
+          },
         });
       });
 
       // Executa todas as atualizações de saldo em paralelo para máxima performance.
       await Promise.all(updatePromises);
     });
-    
+
     // --- 3. Disparo de Notificações (Pós-Transação e em Segundo Plano) ---
     // Após o sucesso da transação, notifica os usuários sobre a renovação do saldo.
     vinculosParaAtualizar.forEach(vinculo => {
-        createNotification({
-            idPropriedade: vinculo.idPropriedade,
-            idAutor: SYSTEM_USER_ID,
-            mensagem: `Seu saldo de diárias para a propriedade '${vinculo.propriedade.nomePropriedade}' foi renovado para o ano de ${currentYear}.`,
-        }).catch(err => {
-            logEvents(`ERRO: Falha ao criar notificação de renovação para o vínculo ID ${vinculo.id}: ${err.message}`, LOG_FILE);
-        });
+      createNotification({
+        idPropriedade: vinculo.idPropriedade,
+        idAutor: SYSTEM_USER_ID,
+        mensagem: `Seu saldo de diárias para a propriedade '${vinculo.propriedade.nomePropriedade}' foi renovado para o ano de ${currentYear}.`,
+      }).catch(err => {
+        logEvents(`ERRO: Falha ao criar notificação de renovação para o vínculo ID ${vinculo.id}: ${err.message}`, LOG_FILE);
+      });
     });
 
     // --- 4. Finalização do Job ---
