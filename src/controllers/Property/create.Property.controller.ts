@@ -53,6 +53,22 @@ export const createProperty = async (req: Request, res: Response) => {
     // Calcula o número de dias a que cada fração da propriedade dá direito.
     const diariasPorFracao = 365 / totalFracoes;
 
+    // Calcula o saldo pro-rata para o ano atual
+    const hoje = new Date();
+    const inicioDoAno = new Date(hoje.getFullYear(), 0, 1);
+    const fimDoAno = new Date(hoje.getFullYear(), 11, 31);
+    // Calcula os dias totais no ano (lidando com anos bissextos)
+    const diasTotaisNoAno = (fimDoAno.getTime() - inicioDoAno.getTime()) / (1000 * 3600 * 24) + 1;
+    // Calcula os dias restantes (incluindo hoje)
+    const diasRestantesNoAno = Math.max(0, (fimDoAno.getTime() - hoje.getTime()) / (1000 * 3600 * 24) + 1);
+    const proporcaoAnoRestante = diasRestantesNoAno / diasTotaisNoAno;
+
+    // O saldo anual total (para o próximo ano) é 365 dias, pois o master detém todas as frações.
+    const saldoAnualTotalMaster = totalFracoes * diariasPorFracao; // = 365
+
+    // O saldo do ano atual é proporcional aos dias restantes.
+    const saldoProRataMaster = saldoAnualTotalMaster * proporcaoAnoRestante;
+
     // --- 3. Criação da Propriedade e Vínculo do Proprietário (Transacional) ---
     // A propriedade e o vínculo são criados em uma única operação aninhada.
     const newProperty = await prisma.propriedades.create({
@@ -66,8 +82,8 @@ export const createProperty = async (req: Request, res: Response) => {
               idUsuario: userId,
               permissao: 'proprietario_master',
               numeroDeFracoes: totalFracoes, // O criador recebe todas as frações inicialmente.
-              saldoDiariasAtual: 365,        // Com todas as frações, o criador tem direito a todos os dias.
-              saldoDiariasFuturo: 365,       // Saldo integral para o próximo ano.
+              saldoDiariasAtual: saldoProRataMaster, // Saldo proporcional ao restante do ano.
+              saldoDiariasFuturo: saldoAnualTotalMaster, // Saldo integral (365) para o próximo ano.
             },
           ],
         },
