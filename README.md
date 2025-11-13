@@ -86,3 +86,27 @@ O sistema resolve o complexo problema de gerenciamento de propriedades compartil
 * **Notificações:** Sistema de notificação interna para eventos relevantes (novas despesas, convites, reservas).
 
 O projeto está com todos os módulos principais implementados e cobertos por testes de integração.
+
+
+## 2. Arquitetura
+
+A aplicação segue uma arquitetura de API monolítica robusta e modular, organizada em camadas lógicas para garantir a separação de responsabilidades (SoC - Separation of Concerns), facilitando a manutenção e a escalabilidade do código.
+
+Os principais componentes arquiteturais são:
+
+* **Servidor de Aplicação:** Desenvolvido em **Node.js** com o framework **Express**, atuando como o ponto central de entrada (API Gateway) para todas as requisições do cliente.
+* **Camada de Dados (ORM):** O **Prisma** abstrai a comunicação com o banco de dados **SQLite** (ambiente de desenvolvimento), garantindo tipagem forte e segurança nas queries.
+* **Camada de Validação:** A biblioteca **Zod** é utilizada para validar rigorosamente todos os dados de entrada (corpo, parâmetros e query strings) antes que eles atinjam a lógica de negócio.
+* **Autenticação e Segurança:** Implementação de um sistema de autenticação *stateless* via **JWT** (JSON Web Tokens), utilizando uma estratégia de *Dual-Token* (Access Token de curta duração e Refresh Token em cookie `HttpOnly` de longa duração).
+* **Gerenciamento de Arquivos:** O middleware **Multer** gerencia o upload e armazenamento local de arquivos (fotos, documentos) no diretório `/uploads`.
+* **Serviços Externos e Integrações:**
+    * **Microserviço de OCR:** Um serviço autônomo desenvolvido em **Python (Flask)**, responsável pelo processamento pesado de imagens e extração de texto via Tesseract/OpenCV. A comunicação é feita via HTTP (POST multipart).
+    * **BrasilAPI:** API pública consumida para consulta de feriados nacionais, utilizada nas regras de agendamento.
+* **Agendamento de Tarefas (Jobs):** O **node-cron** gerencia processos em segundo plano, como a renovação de saldos anuais e a geração de despesas recorrentes.
+* **Tratamento de Erros:** Um middleware global centraliza a captura e formatação de erros, evitando vazamento de informações sensíveis e padronizando as respostas HTTP.
+
+### 2.1. Diagrama de Componentes
+
+O diagrama abaixo ilustra a interação entre os componentes internos do servidor, o banco de dados, o armazenamento de arquivos e os serviços externos.
+
+![Diagrama de Componentes](docs/diagrams/component-diagram-qota.jpg)
