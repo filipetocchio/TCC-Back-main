@@ -1,320 +1,88 @@
-#### Configuração do Backend (Node.js)
+# QOTA - API Back-end (Documentação Técnica)
 
-Em um **novo terminal**, navegue até a pasta raiz do projeto novamente.
-
-```bash
-
-# Navegue até a pasta do backend
-cd TCC-Back-main
-
-# Instale as dependências
-npm install
-
-# Crie o arquivo .env na raiz de 'TCC-Back-main' e copie o conteúdo abaixo,
-# ajustando as chaves secretas se desejar.
-```
-
-**Conteúdo para o arquivo `.env` do Backend:**
-
-```env
-# Porta do servidor backend
-PORT=8001
-
-# URL do frontend
-ALLOWED_ORIGINS="http://localhost:3000"
-FRONTEND_URL="http://localhost:3000"
-
-# Ambiente de execução
-NODE_ENV="development"
-
-# Segredos para tokens JWT 
-ACCESS_TOKEN_SECRET="chave_secreta_para_access_token_qota"
-REFRESH_TOKEN_SECRET="chave_secreta_para_refresh_token_qota"
-
-# URL do banco de dados (SQLite para dev)
-DATABASE_URL="file:./prisma/dev.db"
-
-# URL do microsserviço de OCR 
-OCR_SERVICE_URL="http://localhost:8000/processar-documento"
-```
-
-**Continue os comandos no terminal do backend:**
-
-```bash
-# Gere o cliente Prisma
-npx prisma generate
-
-# Execute as migrações para criar o banco de dados
-npx prisma migrate dev
-
-# Inicie o servidor de desenvolvimento (deixe este terminal aberto)
-npm run dev
-```
-
-> **Nota:** O servidor do Backend irá rodar na porta `8001`.
-
-
-
-# Documentação da API - Qota
-
-![Node.js](https://img.shields.io/badge/Node.js-v20.x-339933?style=for-the-badge&logo=nodedotjs&logoColor=white) ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white) ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white) ![Prisma](https://img.shields.io/badge/Prisma-5.x-2D3748?style=for-the-badge&logo=prisma&logoColor=white)
-
-## 📖 Introdução
-
-[cite_start]O **Qota** é uma plataforma Micro-SaaS para a gestão de bens em regime de multipropriedade imobiliária. [cite: 12] [cite_start]Desenvolvido como um Trabalho de Conclusão de Curso em Engenharia de Software, o projeto visa resolver desafios comuns como conflitos entre cotistas, gestão ineficiente de despesas e falta de transparência no controle de inventário e contratos. [cite: 12, 13]
-
-Esta documentação detalha a API do backend principal, construída em Node.js, que serve como o núcleo para a lógica de negócios, gerenciamento de dados e autenticação de usuários da plataforma Qota.
-
-### Funcionalidades Implementadas
-
--   [cite_start]🔒 **Autenticação Segura**: Fluxo completo de registro, login, logout e renovação de tokens (Access e Refresh Tokens) via JWT, com conformidade LGPD no registro. [cite: 108, 116]
--   [cite_start]👥 **Gestão de Usuários e Cotistas**: CRUD de usuários e um sistema de convites baseado em tokens para adicionar cotistas a uma propriedade, com controle de permissões (RBAC). [cite: 110, 111]
--   [cite_start]🏡 **Gestão de Propriedades**: CRUD completo para ativos imobiliários, com upload de fotos e documentos associados. [cite: 105]
--   [cite_start]📦 **Controle de Inventário**: Módulo detalhado para registrar e gerenciar todos os itens físicos contidos em um imóvel, com suporte a múltiplas fotos por item. [cite: 112]
--   [cite_start]🤖 **Validação com IA (OCR)**: Integração com um microsserviço Python para validar comprovantes de endereço em PDF no momento do cadastro da propriedade. [cite: 106]
--   [cite_start]💸 **Módulo Financeiro (Inicial)**: Endpoint para upload de contas (PDF), que utiliza o microsserviço de OCR para extrair dados (valor, vencimento) e registrar a despesa no sistema. [cite: 115]
+API de back-end robusta e monolítica para o sistema **QOTA**, uma plataforma SaaS desenvolvida para o gerenciamento inteligente de propriedades compartilhadas (multi-propriedade).
 
 ---
 
-## 🏗️ Arquitetura
+## Sumário
 
-O sistema adota uma arquitetura de microsserviços para garantir escalabilidade e separação de responsabilidades.
-
--   **Backend Principal (Esta API):** Construído em **Node.js com Express e TypeScript**, é o cérebro da aplicação, gerenciando usuários, propriedades, permissões e orquestrando chamadas para outros serviços.
--   **Microsserviço de OCR:** Um serviço especializado em **Python com Flask**, responsável por todo o processamento de documentos (PDFs), utilizando **PyMuPDF** para extração direta e **Tesseract-OCR** como fallback para PDFs escaneados.
-
----
-
-## 🛠️ Tecnologias Utilizadas
-
--   **Backend**: Node.js, Express, TypeScript
--   **Banco de Dados**: SQLite (Desenvolvimento), com suporte para PostgreSQL (Produção)
--   **ORM**: Prisma
--   **Autenticação**: JSON Web Token (JWT), `bcrypt`
--   **Validação de Schemas**: Zod
--   **Upload de Arquivos**: Multer
--   **CI/CD**: GitHub Actions
-
----
-
-
-## 🗄️ Estrutura do Banco de Dados
-
-O `schema.prisma` define os seguintes modelos principais, refletindo a estrutura de dados atual da aplicação:
-
-```prisma
-// Modelo de Usuários
-model User {
-  id              Int      @id @default(autoincrement())
-  email           String   @unique
-  password        String
-  nomeCompleto    String
-  cpf             String   @unique
-  // ... campos de consentimento e relacionamentos
-  propriedades    UsuariosPropriedades[]
-  convitesEnviados Convite[]
-}
-
-// Modelo de Propriedades
-model Propriedades {
-  id              Int      @id @default(autoincrement())
-  nomePropriedade String
-  tipo            String
-  // ... campos de endereço
-  usuarios        UsuariosPropriedades[]
-  inventario      ItemInventario[]
-  convites        Convite[]
-  despesas        Despesa[]
-}
-
-// Tabela de Vínculo (N-para-N) entre Usuários e Propriedades
-model UsuariosPropriedades {
-  id            Int      @id @default(autoincrement())
-  idUsuario     Int
-  idPropriedade Int
-  permissao     String // "proprietario_master" ou "proprietario_comum"
-  // ... relacionamentos
-}
-
-// Modelo de Itens de Inventário
-model ItemInventario {
-  id              Int      @id @default(autoincrement())
-  idPropriedade   Int
-  nome            String
-  quantidade      Int
-  // ... outros campos e relacionamento com fotos
-}
-
-// Modelo de Convites
-model Convite {
-  id              Int      @id @default(autoincrement())
-  token           String   @unique
-  emailConvidado  String
-  idPropriedade   Int
-  permissao       String
-  status          StatusConvite @default(PENDENTE)
-  // ...
-}
-
-// Modelo de Despesas
-model Despesa {
-  id              Int      @id @default(autoincrement())
-  idPropriedade   Int
-  descricao       String
-  valor           Float
-  dataVencimento  DateTime
-  status          StatusPagamento @default(PENDENTE)
-  // ...
-}
-```
+- [1. Visão Geral](#1-visão-geral)
+- [2. Arquitetura](#2-arquitetura)
+  - [2.1. Diagrama de Componentes](#21-diagrama-de-componentes)
+- [3. Diagramas UML](#3-diagramas-uml)
+  - [3.1. Diagrama de Casos de Uso](#31-diagrama-de-casos-de-uso)
+  - [3.2. Diagrama de Classes (Modelo de Domínio)](#32-diagrama-de-classes-modelo-de-domínio)
+  - [3.3. Diagramas de Estado](#33-diagramas-de-estado)
+- [4. Tecnologias](#4-tecnologias)
+- [5. Pré-requisitos](#5-pré-requisitos)
+- [6. Instalação](#6-instalação)
+- [7. Configuração (Variáveis de Ambiente)](#7-configuração-variáveis-de-ambiente)
+- [8. Banco de Dados](#8-banco-de-dados)
+- [9. Executando Localmente](#9-executando-localmente)
+- [10. Testes](#10-testes)
+- [11. CI/CD](#11-cicd)
+- [12. Logging e Monitoramento](#12-logging-e-monitoramento)
+- [13. Segurança e Autenticação](#13-segurança-e-autenticação)
+- [14. Modelos de Dados (Schema Prisma)](#14-modelos-de-dados-schema-prisma)
+- [15. Jobs Agendados (Cron)](#15-jobs-agendados-cron)
+- [16. Documentação da API (Endpoints)](#16-documentação-da-api-endpoints)
+  - [16.1. Auth](#161-auth)
+  - [16.2. User](#162-user)
+  - [16.3. Property](#163-property)
+  - [16.4. Permission](#164-permission)
+  - [16.5. Invite](#165-invite)
+  - [16.6. Calendar](#166-calendar)
+  - [16.7. Financial](#167-financial)
+  - [16.8. Inventory](#168-inventory)
+  - [16.9. Inventory Photo](#169-inventory-photo)
+  - [16.10. Property Photo](#1610-property-photo)
+  - [16.11. Property Documents](#1611-property-documents)
+  - [16.12. Notification](#1612-notification)
+  - [16.13. Validation](#1613-validation)
+- [17. Contribuindo](#17-contribuindo)
+- [18. Licença](#18-licença)
 
 ---
 
-## 📜 Lista de Endpoints
+## 1. Visão Geral
 
-A base para todas as rotas é `/api/v1`. Todas as rotas (exceto registro, login e verificação de convite) são protegidas e requerem um `Bearer Token` de autenticação.
+Este repositório contém o código-fonte da API back-end para o sistema QOTA. Trata-se de uma API RESTful monolítica construída em Node.js e Express, responsável por gerenciar toda a lógica de negócio, persistência de dados e autenticação da plataforma.
 
-<details>
-<summary><strong>Auth (/auth)</strong></summary>
+O sistema resolve o complexo problema de gerenciamento de propriedades compartilhadas (multi-propriedade), automatizando a governança entre os coproprietários.
 
--   `POST /register`: Registra um novo usuário.
--   `POST /login`: Realiza o login.
--   `POST /logout`: Realiza o logout (requer cookie).
--   `POST /refresh`: Renova o access token (requer cookie).
+### Principais Funcionalidades do Back-end:
 
-</details>
+####  Gestão de Identidade e Acesso
+* **Autenticação Robusta:** Login seguro com JWT (Access Token) e renovação de sessão via Refresh Token (Cookie HttpOnly).
+* **Direito ao Esquecimento:** Funcionalidade de encerramento de conta com *soft delete* e anonimização automática de dados sensíveis (CPF, E-mail).
+* **Controle de Acesso (RBAC):** Sistema de permissões granulares (Admin, Proprietário Master, Proprietário Comum).
 
-<details>
-<summary><strong>Users (/user)</strong></summary>
+####  Governança da Propriedade
+* **Gestão de Cotas (Frações):** Controle matemático preciso da porcentagem de posse (frações) de cada usuário.
+* **Sistema de Convites:** Geração de tokens seguros para convidar novos membros, com validação de disponibilidade de frações do "pool" da propriedade ou do proprietário master.
+* **Documentação Digital:** Upload e armazenamento seguro de escrituras e documentos legais da propriedade.
+* **Galeria de Fotos:** Gerenciamento de imagens da propriedade.
 
--   `GET /`: Lista todos os usuários com paginação e busca.
--   `GET /:id`: Busca um usuário por ID.
--   `PUT /:id`: Atualiza dados de um usuário (sem foto).
--   `PUT /upload/:id`: Atualiza dados de um usuário, incluindo foto de perfil.
--   `DELETE /:id`: Realiza o soft-delete de um usuário.
+####  Motor de Reservas e Calendário
+* **Saldo de Diárias Inteligente (Dual-Pot):** Lógica avançada que gerencia dois saldos de diárias simultâneos (Ano Corrente vs. Ano Futuro) com cálculo *pro-rata*, prevenindo conflitos de agendamento na virada do ano.
+* **Regras de Estadia:** Validação de duração mínima/máxima, antecedência e limites de ocupação.
+* **Fluxo de Check-in/Check-out:** Registro de entrada e saída com *checklist* integrado do estado do inventário.
+* **Penalidades:** Aplicação automática ou manual de penalidades por cancelamento tardio ou infrações.
 
-</details>
+####  Gestão Financeira e Rateio
+* **Rateio Automático:** Cálculo automático da divisão de despesas entre os cotistas baseado no número de frações, com tratamento de arredondamento financeiro ("centavo perdido").
+* **Processamento via IA (OCR):** Integração para leitura automática de faturas (PDF/Imagem) e extração de dados (valor, vencimento) para cadastro rápido.
+* **Despesas Recorrentes:** Automação para geração de despesas fixas (condomínio, internet) via *Jobs*.
+* **Controle de Pagamentos:** Acompanhamento individual de status de pagamento por cotista.
+* **Relatórios e Dashboard:** Geração de relatórios em PDF (via Puppeteer) e endpoints analíticos para dashboards financeiros.
 
-<details>
-<summary><strong>Properties (/property)</strong></summary>
+####  Gestão de Inventário
+* **Controle de Bens:** Cadastro de itens (mobília, eletrodomésticos) com status de conservação.
+* **Histórico Visual:** Upload de fotos para documentar o estado dos itens do inventário.
 
--   `POST /create`: Cria uma nova propriedade.
--   `GET /`: Lista todas as propriedades com paginação e filtros.
--   `GET /:id`: Busca uma propriedade por ID com todos os detalhes.
--   `PUT /:id`: Atualiza uma propriedade.
--   `DELETE /:id`: Realiza o soft-delete de uma propriedade.
+####  Automação e Infraestrutura
+* **Jobs Agendados (Cron):** Rotinas automáticas para renovação anual de saldos (Rollover), monitoramento de inadimplência e geração de recorrências.
+* **Validação de Endereço:** Integração com serviço de OCR para validar comprovantes de residência.
+* **Notificações:** Sistema de notificação interna para eventos relevantes (novas despesas, convites, reservas).
 
-</details>
-
-<details>
-<summary><strong>Inventory (/inventory)</strong></summary>
-
--   `POST /create`: Adiciona um novo item ao inventário de uma propriedade.
--   `GET /property/:propertyId`: Lista todos os itens de inventário de uma propriedade.
--   `PUT /:id`: Atualiza um item de inventário.
--   `DELETE /:id`: Realiza o soft-delete de um item de inventário.
-
-</details>
-
-<details>
-<summary><strong>Inventory Photos (/inventoryPhoto)</strong></summary>
-
--   `POST /upload`: Faz upload de uma foto para um item de inventário.
--   `DELETE /:id`: Realiza o soft-delete de uma foto de inventário.
-
-</details>
-
-<details>
-<summary><strong>Invites (/invite)</strong></summary>
-
--   `POST /`: Cria e envia um convite para um novo membro.
--   `GET /verify/:token`: Verifica a validade de um token de convite (público).
--   `POST /accept/:token`: Aceita um convite, vinculando o usuário logado à propriedade.
--   `GET /property/:propertyId/pending`: Lista convites pendentes de uma propriedade.
-
-</details>
-
-<details>
-<summary><strong>Permissions (/permission)</strong></summary>
-
--   `GET /:id`: Lista os membros (cotistas) de uma propriedade específica.
--   `PUT /:id`: Atualiza a permissão de um membro (vínculo `UsuariosPropriedades`).
-
-</details>
-
-<details>
-<summary><strong>Validation (/validation)</strong></summary>
-
--   `POST /address`: Valida um comprovante de endereço em PDF via serviço de OCR.
-
-</details>
-
-<details>
-<summary><strong>Financial (/financial)</strong></summary>
-
--   `POST /upload-invoice`: Faz upload de uma conta em PDF, extrai os dados via OCR e registra como uma despesa.
-
-</details>
-
----
-
-## 📚 Endpoints Detalhados (Exemplos Chave)
-
-#### POST `/validation/address`
-
-Valida se o endereço fornecido em um formulário corresponde ao endereço contido em um comprovante em PDF.
-
--   **Método**: `POST`
--   **Tipo de Conteúdo**: `multipart/form-data`
--   **Body**:
-    -   `documento` (file): O arquivo PDF a ser validado.
-    -   `address` (string): O endereço do formulário (ex: "Rua Exemplo, 123").
-    -   `cep` (string): O CEP do formulário (ex: "12345-678").
--   **Resposta de Sucesso (200 OK)**:
-    ```json
-    {
-      "success": true,
-      "message": "Endereço validado com sucesso via CEP."
-    }
-    ```
--   **Resposta de Falha (400 Bad Request)**:
-    ```json
-    {
-      "success": false,
-      "message": "Não foi possível validar o endereço no documento fornecido."
-    }
-    ```
-
-#### POST `/invite`
-
-Cria um convite para um novo usuário se juntar a uma propriedade. Apenas `proprietario_master` pode realizar esta ação.
-
--   **Método**: `POST`
--   **Body (JSON)**:
-    ```json
-    {
-      "emailConvidado": "novo.membro@example.com",
-      "idPropriedade": 1,
-      "permissao": "proprietario_comum"
-    }
-    ```
--   **Resposta de Sucesso (201 Created)**:
-    ```json
-    {
-      "success": true,
-      "message": "Convite criado com sucesso para novo.membro@example.com.",
-      "data": {
-        "linkConvite": "http://localhost:3000/convite/a1b2c3d4e5f6..."
-      }
-    }
-    ```
-
----
-
-## 🔮 Próximos Passos e Visão Futura
-
-Com base no escopo do projeto, os próximos passos planejados incluem:
-
--   [cite_start]**Integração com Blockchain**: Para criar um "cartório digital" descentralizado, permitindo o registro imutável de propriedades e a tokenização de frações, aumentando a segurança e transparência. [cite: 38]
--   [cite_start]**Expansão para Pool Hoteleiro**: Integração com plataformas como Booking.com para gerenciar propriedades no modelo de pool. [cite: 27]
--   [cite_start]**Inteligência Artificial Preditiva**: Implementação de IA para analisar padrões de uso e otimizar agendamentos ou prever despesas de manutenção. [cite: 292]
+O projeto está com todos os módulos principais implementados e cobertos por testes de integração.
