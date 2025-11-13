@@ -110,3 +110,40 @@ Os principais componentes arquiteturais são:
 O diagrama abaixo ilustra a interação entre os componentes internos do servidor, o banco de dados, o armazenamento de arquivos e os serviços externos.
 
 ![Diagrama de Componentes](docs/diagrams/component-diagram-qota.jpg)
+
+
+
+## 3. Diagramas UML
+
+Esta seção apresenta a modelagem visual do sistema, essencial para o entendimento dos fluxos de negócio, estrutura de dados e comportamento das entidades.
+
+### 3.1. Diagrama de Casos de Uso
+
+Este diagrama ilustra as principais funcionalidades (casos de uso) do sistema e como os diferentes atores (usuários e sistemas) interagem com elas. Ele detalha as permissões de cada perfil (Visitante, Cotista, Cotista Master, Administrador) e as interações com sistemas externos (OCR, BrasilAPI) e internos (Cron Jobs).
+
+![Diagrama de Casos de Uso](docs/diagrams/use-case-qota.jpg)
+
+
+### 3.2. Diagrama de Classes (Modelo de Domínio)
+
+Este diagrama de classes ilustra as principais entidades do banco de dados (conforme o `schema.prisma`) e seus relacionamentos. Ele serve como referência para a estrutura de dados persistida, mostrando tabelas como `User`, `Propriedades`, `Reserva`, `Despesa`, e a tabela associativa crítica `UsuariosPropriedades` que gerencia as cotas e saldos.
+
+![Diagrama de Classes](docs/diagrams/class-diagram-qota.jpg)
+
+
+### 3.3. Diagramas de Estado
+
+Estes diagramas modelam o ciclo de vida e as transições de estado para as três entidades mais dinâmicas do sistema:
+
+1.  **Reserva:** Mostra o fluxo desde a criação (`CONFIRMADA`) até a conclusão (`CONCLUIDA`), cancelamento (`CANCELADA`) ou não comparecimento (`NO_SHOW`).
+2.  **Despesa:** Detalha a evolução financeira, desde a criação (`PENDENTE`), passando por pagamentos parciais, atrasos, até a quitação total (`PAGO`).
+3.  **Convite:** Ilustra a validade temporal do token de convite (`PENDENTE` -> `ACEITO` ou `EXPIRADO`).
+
+![Diagramas de Estado](docs/diagrams/state-diagrams-qota.jpg)
+
+
+### 3.4. Diagrama de Entidade-Relacionamento (DER)
+
+O diagrama abaixo representa fielmente o schema do banco de dados, detalhando as tabelas, chaves primárias (PK), chaves estrangeiras (FK) e a cardinalidade dos relacionamentos.
+
+![Diagrama de Entidade-Relacionamento (DER)](docs/diagrams/der-qota.jpg)
