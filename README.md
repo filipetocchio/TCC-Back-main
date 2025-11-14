@@ -164,7 +164,7 @@ A stack de tecnologia do back-end é composta por um monolito Node.js/TypeScript
 | **Linguagem** | TypeScript | `5.1.6` |
 | **Framework** | Express | `^5.1.0` |
 | **ORM** | Prisma | `6.5.0` |
-| **Banco de Dados**| SQLite | (N/A - via Prisma) |
+| **Banco de Dados**| SQLite | (N/A - via Prisma) | PostgreSQL para Produção
 | **Autenticação**| jsonwebtoken | `9.0.0` |
 | **Hashing** | bcrypt | `5.1.0` |
 | **Validação** | zod | `4.1.11` |
@@ -189,3 +189,22 @@ A stack de tecnologia do back-end é composta por um monolito Node.js/TypeScript
 | **Process. Imagem** | OpenCV (`cv2`) | Pré-processamento de imagens para OCR |
 | **Manipulação PDF** | PyMuPDF (`fitz`) | Extração de texto nativo de PDF |
 | **Conversão PDF** | `pdf2image` | Conversão de PDF em imagem para OCR |
+
+
+## 5. Pré-requisitos
+
+Para compilar, executar e testar o sistema QOTA localmente em sua totalidade (API principal e microsserviço de OCR), o seguinte software deve estar instalado e configurado no ambiente de desenvolvimento:
+
+### API Principal (Node.js)
+
+* **Node.js:** É recomendada a versão **v20.x**. A versão mínima suportada, conforme o arquivo `.nvmrc` e a pipeline de CI, é a **v18.16.0**.
+* **NPM (Node Package Manager):** Versão `9.x` ou `10.x` (geralmente instalada automaticamente com o Node.js).
+* **Git:** Essencial para clonar o repositório e gerenciar o versionamento.
+* **SQLite3 (Biblioteca Nativa):** O Prisma ORM requer a biblioteca C do SQLite para interagir com o banco de dados.
+    * **Linux (Debian/Ubuntu):** `sudo apt-get install -y sqlite3 libsqlite3-dev`
+    * **macOS (Homebrew):** `brew install sqlite3`
+    * **Windows:** O driver já vem incluído na maioria das instalações do Node.js.
+
+
+
+    
