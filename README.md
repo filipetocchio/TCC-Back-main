@@ -147,3 +147,45 @@ Estes diagramas modelam o ciclo de vida e as transições de estado para as trê
 O diagrama abaixo representa fielmente o schema do banco de dados, detalhando as tabelas, chaves primárias (PK), chaves estrangeiras (FK) e a cardinalidade dos relacionamentos.
 
 ![Diagrama de Entidade-Relacionamento (DER)](docs/diagrams/der-qota.jpg)
+
+
+
+
+## 4. Tecnologias
+
+A stack de tecnologia do back-end é composta por um monolito Node.js/TypeScript e um microserviço Python/Flask para tarefas de IA.
+
+
+### API Principal (TCC-Back-main)
+
+| Categoria | Tecnologia | Versão (do `package.json`) |
+| :--- | :--- | :--- |
+| **Runtime** | Node.js | `>=18.18.0` (v20+ recomendado) |
+| **Linguagem** | TypeScript | `5.1.6` |
+| **Framework** | Express | `^5.1.0` |
+| **ORM** | Prisma | `6.5.0` |
+| **Banco de Dados**| SQLite | (N/A - via Prisma) |
+| **Autenticação**| jsonwebtoken | `9.0.0` |
+| **Hashing** | bcrypt | `5.1.0` |
+| **Validação** | zod | `4.1.11` |
+| **Uploads** | multer | `2.0.2` |
+| **Cliente HTTP** | axios | `1.12.2` |
+| **Geração PDF** | puppeteer | `^24.23.0` |
+| **Jobs Agendados** | node-cron | `^4.2.1` |
+| **Testes** | Jest | `29.7.0` |
+| **Testes API** | supertest | `7.1.4` |
+
+
+
+### Microserviço de OCR (Qota-OCR-Service)
+
+
+
+| Categoria | Tecnologia | Função |
+| :--- | :--- | :--- |
+| **Framework** | Flask | Servidor API (em Python) |
+| **Motor OCR** | Tesseract (`pytesseract`) | Reconhecimento Óptico de Caracteres |
+| **NLP** | spaCy | Reconhecimento de Entidades (NER) |
+| **Process. Imagem** | OpenCV (`cv2`) | Pré-processamento de imagens para OCR |
+| **Manipulação PDF** | PyMuPDF (`fitz`) | Extração de texto nativo de PDF |
+| **Conversão PDF** | `pdf2image` | Conversão de PDF em imagem para OCR |
