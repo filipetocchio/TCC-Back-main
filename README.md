@@ -207,4 +207,34 @@ Para compilar, executar e testar o sistema QOTA localmente em sua totalidade (AP
 
 
 
+
+
+## 6. Instalação
+
+Siga os passos abaixo para configurar o ambiente de desenvolvimento da API principal (Node.js).
+
+Em um **novo terminal**, navegue até a pasta raiz do projeto novamente.
+
+1.  **Clonar o Repositório**
     
+
+```bash
+
+# Navegue até o diretório onde deseja salvar o projeto e clone o repositório:
+ git clone [https://github.com/filipetocchio/TCC-Back-main.git](https://github.com/filipetocchio/TCC-Back-main.git)
+
+
+# Navegue até a pasta do backend
+cd TCC-Back-main
+
+# Instale as dependências
+npm install
+
+**Continue os comandos no terminal do backend:**
+
+```bash
+# Gere o cliente Prisma
+npx prisma generate
+
+```
+
