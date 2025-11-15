@@ -238,3 +238,59 @@ npx prisma generate
 
 ```
 
+
+
+
+## 7. Configuração (Variáveis de Ambiente)
+
+A API é configurada usando variáveis de ambiente, que devem ser fornecidas em um arquivo `.env` localizado na raiz do projeto (`TCC-Back-main/.env`).
+
+
+Copie o conteúdo do arquivo `Instruções_para_rodar.md` (ou use a tabela abaixo como referência) para criar seu arquivo `.env` local.
+
+
+| Variável | Descrição | Exemplo (Desenvolvimento) |
+| :--- | :--- | :--- |
+| `PORT` | Porta onde o servidor Express irá rodar. | `8001` |
+| `ALLOWED_ORIGINS` | URLs do front-end permitidas pelo CORS (separadas por vírgula). | `http://localhost:3000` |
+| `FRONTEND_URL` | URL base do front-end (usada para gerar links de convite). | `http://localhost:3000` |
+| `NODE_ENV` | Define o ambiente de execução (`development` ou `production`). | `development` |
+| `ACCESS_TOKEN_SECRET`| Chave secreta (string longa) para assinar Access Tokens JWT. | `chave_secreta_para_access_token_qota` |
+| `REFRESH_TOKEN_SECRET`| Chave secreta (string longa) para assinar Refresh Tokens JWT. | `chave_secreta_para_refresh_token_qota` |
+| `DATABASE_URL` | String de conexão com o banco de dados Prisma. | `file:./prisma/dev.db` |
+| `OCR_SERVICE_URL` | Endpoint completo do microsserviço de OCR (Python/Flask). | `http://localhost:8000/processar-documento` |
+| `SYSTEM_USER_ID` | (Implícito) ID do usuário "Sistema" para notificações de Jobs. | `1` |
+
+
+
+
+**Crie o arquivo .env na raiz de 'TCC-Back-main' e copie o conteúdo abaixo,**
+**ajustando as chaves secretas se desejar.**
+
+
+
+**Conteúdo para o arquivo `.env` do Backend:**
+
+```env
+# Porta do servidor backend
+PORT=8001
+
+# URL do frontend
+ALLOWED_ORIGINS="http://localhost:3000"
+FRONTEND_URL="http://localhost:3000"
+
+# Ambiente de execução
+NODE_ENV="development"
+
+# Segredos para tokens JWT 
+ACCESS_TOKEN_SECRET="chave_secreta_para_access_token_qota"
+REFRESH_TOKEN_SECRET="chave_secreta_para_refresh_token_qota"
+
+# URL do banco de dados (SQLite para dev)
+DATABASE_URL="file:./prisma/dev.db"
+
+# URL do microsserviço de OCR 
+OCR_SERVICE_URL="http://localhost:8000/processar-documento"
+```
+
+
