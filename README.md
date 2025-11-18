@@ -294,3 +294,42 @@ OCR_SERVICE_URL="http://localhost:8000/processar-documento"
 ```
 
 
+
+
+## 8. Banco de Dados
+
+A aplicação utiliza o **Prisma** como ORM (Object-Relational Mapper) para abstrair a comunicação com o banco de dados, garantindo tipagem forte, segurança contra SQL Injection e gerenciamento de schema.
+
+* **Schema (Fonte da Verdade):** A estrutura completa de dados, incluindo tabelas (models), campos, tipos e relacionamentos, está definida em `prisma/schema.prisma`.
+* **Banco de Desenvolvimento:** Conforme configurado em `DATABASE_URL` no arquivo `.env`, o ambiente de desenvolvimento utiliza **SQLite** (ex: `file:./prisma/dev.db`).
+* **Banco de Testes (CI):** A pipeline de CI (`ci.yml`) também é configurada para rodar em **SQLite**.
+
+### 8.1. Migrations (Evolução do Schema)
+
+As migrações do banco de dados (histórico de alterações) são gerenciadas pelo Prisma CLI.
+
+**Para aplicar as migrações** (ou criar o banco de dados pela primeira vez no desenvolvimento), execute:
+
+```bash
+# Sincroniza o banco com o schema e aplica migrações pendentes
+npx prisma migrate dev
+```
+
+**Para criar uma nova migração** após modificar o arquivo schema.prisma:
+
+
+```bash
+# O Prisma solicitará um nome para a nova migração
+npx prisma migrate dev --name "nome-da-sua-migracao"
+```
+
+###  8.2. Prisma Studio (Gerenciador Visual)
+
+O Prisma inclui uma ferramenta visual baseada na web para visualizar, consultar e editar os dados do seu banco de dados local. Para iniciá-la, execute:
+
+```bash
+npx prisma studio
+```
+
+O Studio abrirá automaticamente no seu navegador, permitindo a manipulação direta dos dados nas tabelas (User, Propriedades, Reserva, etc.).
+
