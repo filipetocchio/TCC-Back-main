@@ -381,3 +381,32 @@ npm start
 ```
 
 
+
+## 10. Testes
+
+A aplicação possui uma suíte de testes de integração e unitários robusta, construída com **Jest**, **ts-jest** e **Supertest**, para garantir a confiabilidade e a corretude dos controllers e da lógica de negócio.
+
+A estratégia de testes (`src/__tests__/`) é baseada em **mocking da camada de persistência**. Conforme definido em `jest.setup.ts`:
+
+* **Mock do Prisma:** O `PrismaClient` é globalmente mockado usando `jest-mock-extended` (`mockDeep`). Isso isola os testes do banco de dados, permitindo a simulação de retornos (`prismaMock.user.findFirst.mockResolvedValue(...)`) e a asserção de chamadas, resultando em testes de integração extremamente rápidos e determinísticos.
+* **Mock do Bcrypt:** A biblioteca `bcrypt` é mockada para que as operações de `hash` e `compare` sejam previsíveis e não consumam tempo de CPU.
+
+### 10.1. Executando Testes
+
+Os scripts para execução dos testes estão definidos no `package.json`:
+
+**1. Executar a suíte de testes completa:**
+Este comando é usado na pipeline de CI e para validação local.
+
+```bash
+npm test
+```
+
+
+**2. Executar em modo "Watch":**
+Este comando monitora alterações nos arquivos de código e de teste, executando novamente apenas os testes relevantes, ideal para o ciclo de desenvolvimento.
+
+```bash
+npm run test:watch
+```
+
