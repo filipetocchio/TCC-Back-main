@@ -724,3 +724,980 @@ A API utiliza o pacote `node-cron` para agendar e executar tarefas de manutenç�
     1.  Ele busca todas as despesas que estão com status `PENDENTE` ou `PARCIALMENTE_PAGO` e cuja `dataVencimento` é anterior ao dia atual.
     2.  Atualiza o status de todas essas despesas para `ATRASADO` usando uma operação em massa (`prisma.despesa.updateMany`).
     3.  Dispara notificações "fire-and-forget" para as propriedades afetadas.
+
+
+
+
+
+
+
+
+## 16. Documentação da API (Endpoints)
+
+A API é versionada e todos os endpoints estão sob o prefixo `/api/v1`. Todas as rotas que manipulam dados são protegidas e requerem um Access Token JWT.
+
+### 16.1. Auth
+
+Controladores: `src/controllers/Auth/`
+Rotas: `src/routes/auth.route.ts`
+
+Rotas responsáveis pelo ciclo de vida da autenticação do usuário (registro, login, logout, renovação de sessão).
+
+#### POST `/api/v1/auth/register`
+**Descrição:** Registra um novo usuário na plataforma. Verifica duplicidade de e-mail e CPF, hasheia a senha (`bcrypt`) e, em caso de sucesso, gera e retorna tokens de acesso e refresh (autenticando o usuário automaticamente).
+**Auth:** Nenhuma.
+**Request Body (application/json):**
+    {
+      "email": "novo.usuario@qota.com",
+      "password": "Password123!",
+      "nomeCompleto": "Nome de Teste",
+      "cpf": "12345678901",
+      "telefone": "11987654321",
+      "termosAceitos": true
+    }
+**Response 201 (application/json):**
+    {
+      "success": true,
+      "message": "Novo usuário Nome de Teste criado com sucesso.",
+      "data": {
+        "accessToken": "ey...",
+        "id": 1,
+        "email": "novo.usuario@qota.com",
+        "nomeCompleto": "Nome de Teste",
+        "cpf": "12345678901",
+        "telefone": "11987654321",
+        "userPhoto": null
+      }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "A senha deve ter pelo menos 6 caracteres." | Falha na validação do Zod (`registerSchema`). |
+| 400 | "Você deve aceitar os Termos de Uso..." | `termosAceitos` é `false`. |
+| 409 | "Este e-mail já está em uso por uma conta ativa." | Conflito de e-mail (`User.email`). |
+| 409 | "Este CPF já está em uso por uma conta ativa." | Conflito de CPF (`User.cpf`). |
+
+#### POST `/api/v1/auth/login`
+**Descrição:** Autentica um usuário existente. Valida as credenciais (`bcrypt.compare`) e, se corretas, retorna um novo Access Token e um Refresh Token (via cookie `httpOnly`).
+**Auth:** Nenhuma.
+**Request Body (application/json):**
+    {
+      "email": "usuario.existente@qota.com",
+      "password": "Password123!"
+    }
+**Response 200 (application/json):**
+(Define o cookie `jwt=...; HttpOnly; Secure; SameSite=Lax`)
+    {
+      "success": true,
+      "message": "Usuário Nome de Teste logado com sucesso.",
+      "data": {
+        "accessToken": "ey...",
+        "id": 1,
+        "email": "usuario.existente@qota.com",
+        "userPhoto": { "url": "http://localhost:8001/uploads/..." }
+      }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 401 | "E-mail ou senha inválidos." | Usuário não encontrado, senha incorreta, ou usuário `excludedAt != null`. |
+
+#### POST `/api/v1/auth/logout`
+**Descrição:** Encerra a sessão do usuário. Invalida o Refresh Token no banco de dados (`User.refreshToken = null`) e limpa o cookie `jwt` do cliente.
+**Auth:** JWT (Access Token).
+**Request Body:** Nenhuma.
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Logout realizado com sucesso."
+    }
+
+#### POST `/api/v1/auth/refresh`
+**Descrição:** Renova a sessão do usuário. Utiliza o Refresh Token (enviado via cookie `jwt`) para gerar um novo Access Token de curta duração.
+**Auth:** Nenhuma (usa cookie `jwt`).
+**Request Body:** Nenhuma.
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Sessão restaurada com sucesso.",
+      "data": {
+        "accessToken": "ey... (novo)",
+        "id": 1,
+        "email": "usuario.existente@qota.com",
+        "userPhoto": { "url": "http://localhost:8001/uploads/..." }
+      }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 401 | "Acesso não autorizado. A sessão é inválida ou expirou." | Cookie `jwt` não foi enviado. |
+| 403 | "Acesso proibido. O token de sessão não é mais válido." | Token expirado, inválido, ou não encontrado no DB (logout). |
+
+### 16.2. User
+Controladores: `src/controllers/User/`
+Rotas: `src/routes/user.route.ts`
+
+Rotas para gerenciamento de perfis de usuário.
+
+#### GET `/api/v1/user/`
+**Descrição:** (Admin) Lista todos os usuários da plataforma com paginação e busca.
+**Auth:** JWT (Roles: `ROLES_LIST.Admin`).
+**Query Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `limit` | `number` | Não | 10 | Quantidade de registros por página. |
+| `page` | `number` | Não | 1 | Número da página. |
+| `search` | `string` | Não | "teste" | Busca por e-mail, nome ou CPF. |
+| `showDeleted`| `string` | Não | "false" | "false" (padrão), "true" (todos), "only" (só excluídos). |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Usuários recuperados com sucesso.",
+      "data": {
+        "users": [ ... ],
+        "pagination": { "page": 1, "limit": 10, "totalRecords": 1, "totalPages": 1 }
+      }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 403 | "Acesso negado." | Usuário não é Admin. |
+
+#### GET `/api/v1/user/:id`
+**Descrição:** Busca os detalhes do perfil de um usuário específico.
+**Auth:** JWT (Access Token).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `number` | Sim | 1 | ID do usuário a ser buscado. |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Usuário recuperado com sucesso.",
+      "data": { "id": 1, "email": "...", "nomeCompleto": "...", "userPhoto": { ... } }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 403 | "Acesso negado. Você só pode visualizar seu próprio perfil." | `requesterId` não é igual ao `:id`. |
+| 404 | "Usuário não encontrado." | ID não existe. |
+
+#### PUT `/api/v1/user/:id`
+**Descrição:** Atualiza os dados do perfil de um usuário. Permite envio de `multipart/form-data` para atualização da foto de perfil.
+**Auth:** JWT (Access Token).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `number` | Sim | 1 | ID do usuário a ser atualizado. |
+**Request Body (multipart/form-data):**
+(Campos opcionais)
+    {
+      "nomeCompleto": "Novo Nome de Teste",
+      "telefone": "11999998888",
+      "password": "NovaSenha123!",
+      "fotoPerfil": (arquivo de imagem)
+    }
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Usuário atualizado com sucesso.",
+      "data": { "id": 1, "nomeCompleto": "Novo Nome de Teste", ... }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 403 | "Acesso negado. Você só pode editar seu próprio perfil." | `requesterId` não é igual ao `:id`. |
+| 409 | "Este e-mail já está em uso." | Tentativa de mudar para um e-mail duplicado. |
+
+#### DELETE `/api/v1/user/:id`
+**Descrição:** Encerra e anonimiza a conta de um usuário. Realiza um *soft delete* (`excludedAt`) e sobrescreve os campos `email` e `cpf` com dados anonimizados (`deleted_{timestamp}_...`) para liberar as credenciais.
+**Auth:** JWT (Access Token).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `number` | Sim | 1 | ID do usuário a ser encerrado. |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "A sua conta de usuário foi encerrada com sucesso."
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 403 | "Acesso negado. Você só pode encerrar sua própria conta." | `requesterId` não é igual ao `:id`. |
+| 404 | "Usuário não encontrado ou já foi encerrado." | O usuário não existe ou já está `excludedAt`. |
+
+### 16.3. Property
+Controladores: `src/controllers/Property/`
+Rotas: `src/routes/property.route.ts`
+
+Rotas para o CRUD de propriedades.
+
+#### POST `/api/v1/property/create`
+**Descrição:** Cria uma nova propriedade. O usuário que cria é automaticamente definido como `proprietario_master`, recebendo 100% das frações (ex: 52), o saldo pro-rata para o ano atual e o saldo cheio para o ano futuro.
+**Auth:** JWT (Access Token).
+**Request Body (application/json):**
+    {
+      "nomePropriedade": "Casa de Praia",
+      "tipo": "Casa",
+      "totalFracoes": 52,
+      "enderecoCep": "12345678",
+      "enderecoCidade": "São Paulo",
+      "valorEstimado": 500000
+    }
+**Response 201 (application/json):**
+    {
+      "success": true,
+      "message": "Propriedade \"Casa de Praia\" criada com sucesso.",
+      "data": { "id": 1, "nomePropriedade": "Casa de Praia", ... }
+    }
+**Notas:** A lógica de cálculo de saldo pro-rata é executada aqui.
+
+#### GET `/api/v1/property/`
+**Descrição:** Lista todas as propriedades do *usuário autenticado* com paginação e busca. Usado pelo front-end para o dashboard inicial, mas substituído em favor de `/permission/user/:id/properties`.
+**Auth:** JWT (Access Token).
+**Query Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `limit` | `number` | Não | 10 | Paginação. |
+| `page` | `number` | Não | 1 | Paginação. |
+| `search` | `string` | Não | "casa" | Busca por nome ou cidade. |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "data": {
+        "properties": [
+          { "id": 1, "nomePropriedade": "Casa de Praia", "permissao": "proprietario_master", ... }
+        ],
+        "pagination": { ... }
+      }
+    }
+
+#### GET `/api/v1/property/:id`
+**Descrição:** Busca os detalhes completos de uma propriedade específica, incluindo a lista de membros (`usuarios`), fotos e documentos.
+**Auth:** JWT (Access Token) (Deve ser membro da propriedade).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `number` | Sim | 1 | ID da propriedade. |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Propriedade recuperada com sucesso.",
+      "data": {
+        "id": 1,
+        "nomePropriedade": "Casa de Praia",
+        "totalFracoes": 52,
+        "diariasPorFracao": 7.019,
+        "fotos": [ ... ],
+        "documentos": [ ... ],
+        "usuarios": [
+          { "id": 101, "permissao": "proprietario_master", "numeroDeFracoes": 52, ... }
+        ]
+      }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 404 | "Propriedade não encontrada ou acesso negado." | ID não existe ou o usuário requisitante não é membro. |
+
+#### PUT `/api/v1/property/:id`
+**Descrição:** Atualiza os dados de uma propriedade. Apenas `proprietario_master`. Se `totalFracoes` for alterado, recalcula o saldo (atual pro-rata e futuro cheio) de todos os membros.
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `number` | Sim | 1 | ID da propriedade. |
+**Request Body (application/json):**
+    {
+      "nomePropriedade": "Casa de Praia (Atualizada)",
+      "totalFracoes": 52
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "Acesso negado, a propriedade não foi encontrada..." | Usuário não é Master ou propriedade não existe. |
+| 400 | "Não é possível definir o total de frações..." | `totalFracoes` é menor que o número de cotistas com frações. |
+
+#### DELETE `/api/v1/property/:id`
+**Descrição:** Realiza um *soft delete* de uma propriedade (define `excludedAt`). Apenas `proprietario_master`.
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `number` | Sim | 1 | ID da propriedade. |
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 403 | "Acesso negado. Apenas proprietários master..." | Usuário não é Master. |
+| 400 | "Esta propriedade já foi excluída anteriormente." | `excludedAt` já está definido. |
+
+### 16.4. Permission
+Controladores: `src/controllers/Permission/`
+Rotas: `src/routes/permission.route.ts`
+
+Rotas para gerenciar vínculos (permissões, frações) entre usuários e propriedades.
+
+#### GET `/api/v1/permission/`
+**Descrição:** (Admin) Lista todos os vínculos (`UsuariosPropriedades`) do sistema, com paginação.
+**Auth:** JWT (Roles: `ROLES_LIST.Admin`).
+**Query Params:** `limit`, `page`, `search`.
+
+#### GET `/api/v1/permission/user/:id/properties`
+**Descrição:** Rota principal da Home (Dashboard). Lista todas as propriedades (vínculos) de um usuário específico, incluindo sua permissão e saldos de diárias (atual e futuro) para cada uma.
+**Auth:** JWT (Access Token).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `number` | Sim | 1 | ID do usuário (`requesterId` deve ser o mesmo). |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Propriedades do usuário recuperadas com sucesso.",
+      "data": [
+        {
+          "id": 1,
+          "nomePropriedade": "Casa de Praia",
+          "tipo": "Casa",
+          "imagemPrincipal": "/uploads/property/property-photo-123.jpg",
+          "permissao": "proprietario_master",
+          "numeroDeFracoes": 51,
+          "saldoDiariasAtual": 360.0,
+          "saldoDiariasFuturo": 358.0
+        }
+      ],
+      "pagination": { ... }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 403 | "Acesso negado. Você só pode visualizar sua própria lista..." | `requesterId` não é igual ao `:id`. |
+
+#### GET `/api/v1/permission/:id`
+**Descrição:** Lista todos os membros (vínculos `UsuariosPropriedades`) de uma propriedade específica, com paginação e busca.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `number` | Sim | 1 | ID da **Propriedade**. |
+**Query Params:** `limit`, `page`, `search`.
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Membros da propriedade recuperados com sucesso.",
+      "data": [
+        {
+          "idVinculo": 101,
+          "idUsuario": 1,
+          "nomeCompleto": "Master da Silva",
+          "email": "master@qota.com",
+          "permissao": "proprietario_master",
+          "numeroDeFracoes": 51,
+          "saldoDiariasAtual": 360.0
+        }
+      ],
+      "pagination": { ... }
+    }
+
+#### PUT `/api/v1/permission/:id`
+**Descrição:** Atualiza a permissão (role) de um membro. Apenas `proprietario_master`.
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `number` | Sim | 102 | ID do **Vínculo** (`UsuariosPropriedades.id`). |
+**Request Body (application/json):**
+    {
+      "permissao": "proprietario_master"
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 403 | "Acesso negado. Apenas proprietários master..." | Requisitante não é Master. |
+| 400 | "Você não pode alterar sua própria permissão." | |
+| 400 | "Ação bloqueada: Um usuário precisa ter pelo menos 1 fração..." | Tentativa de promover usuário com 0 frações. |
+| 400 | "Ação bloqueada: Não é possível rebaixar o último..." | |
+
+#### PUT `/api/v1/permission/cota/:vinculoId`
+**Descrição:** Atualiza o `numeroDeFracoes` de um membro. Apenas `proprietario_master`. Recalcula e atualiza os saldos (Atual pro-rata, Futuro cheio) do membro alvo.
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `vinculoId`| `number` | Sim | 102 | ID do **Vínculo** (`UsuariosPropriedades.id`). |
+**Request Body (application/json):**
+    {
+      "numeroDeFracoes": 5
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "Operação inválida. O número total de frações..." | Soma das frações ultrapassa o `totalFracoes` da propriedade. |
+
+#### DELETE `/api/v1/permission/unlink/member/:vinculoId`
+**Descrição:** (Master) Remove (desvincula) *outro* membro da propriedade. As frações e saldos (pro-rata e futuro) do membro removido são transferidos para o master que executou a ação.
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `vinculoId`| `number` | Sim | 102 | ID do **Vínculo** (`UsuariosPropriedades.id`) do membro a ser removido. |
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "Você não pode remover a si mesmo." | Master tentando se auto-remover por esta rota. |
+
+#### DELETE `/api/v1/permission/unlink/me/:vinculoId`
+**Descrição:** (Usuário) Permite que o usuário autenticado se desvincule (saia) de uma propriedade. As frações e saldos (pro-rata e futuro) são transferidos para o master mais antigo.
+**Auth:** JWT (Access Token).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `vinculoId`| `number` | Sim | 102 | ID do **Vínculo** (`UsuariosPropriedades.id`) do próprio usuário. |
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "Acesso negado. Você só pode remover o seu próprio vínculo." | |
+| 400 | "Ação bloqueada. Você é o único proprietário master." | Impede que o último master saia. |
+
+### 16.5. Invite
+Controladores: `src/controllers/Invite/`
+Rotas: `src/routes/invite.route.ts`
+
+Rotas para o fluxo de convite de novos membros.
+
+#### POST `/api/v1/invite`
+**Descrição:** (Master) Cria um novo convite (token) para um e-mail se juntar a uma propriedade.
+**Auth:** JWT (Role: `proprietario_master`).
+**Request Body (application/json):**
+    {
+      "emailConvidado": "novo.cotista@email.com",
+      "idPropriedade": 1,
+      "permissao": "proprietario_comum",
+      "numeroDeFracoes": 1
+    }
+**Response 201 (application/json):**
+    {
+      "success": true,
+      "message": "Convite criado com sucesso para novo.cotista@email.com.",
+      "data": {
+        "linkConvite": "http://localhost:3000/convite/a1b2c3d4e5f6..."
+      }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "Não é possível criar este convite. ... frações livres" | Master tentando ceder mais frações do que possui. |
+| 409 | "Este usuário já é membro da propriedade." | |
+
+#### GET `/api/v1/invite/verify/:token`
+**Descrição:** (Público) Verifica um token de convite. Usado pelo front-end para mostrar a tela correta (Registrar, Logar ou Aceitar).
+**Auth:** Nenhuma.
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `token` | `string` | Sim | "a1b2c3d4e5f6..." | O token de convite. |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Convite válido.",
+      "data": {
+        "propriedade": "Casa de Praia",
+        "convidadoPor": "Master da Silva",
+        "emailConvidado": "novo.cotista@email.com",
+        "userExists": false,
+        "numeroDeFracoes": 1
+      }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 404 | "Convite inválido ou já utilizado." | Token não encontrado ou status != PENDENTE. |
+| 410 | "Este convite expirou." | `dataExpiracao` ultrapassada. |
+
+#### POST `/api/v1/invite/accept/:token`
+**Descrição:** (Usuário) Aceita um convite. O usuário deve estar autenticado. O sistema cria o vínculo (`UsuariosPropriedades`), transfere as frações (do pool livre ou do master) e calcula os saldos pro-rata (atual) e cheio (futuro) para o novo membro.
+**Auth:** JWT (Access Token).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `token` | `string` | Sim | "a1b2c3d4e5f6..." | O token de convite. |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Convite aceito com sucesso! A propriedade agora faz parte da sua conta."
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "Convite inválido, expirado ou já utilizado." | |
+| 400 | "Acesso negado: Este convite foi destinado a outro e-mail." | E-mail do usuário logado != e-mail do convite. |
+| 409 | "Você já é um membro desta propriedade." | Vínculo já existe (erro P2002). |
+
+#### GET `/api/v1/invite/property/:propertyId/pending`
+**Descrição:** (Master) Lista os convites pendentes e não expirados de uma propriedade.
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `propertyId` | `number` | Sim | 1 | ID da Propriedade. |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Convites pendentes recuperados com sucesso.",
+      "data": [ ... ],
+      "pagination": { ... }
+    }
+
+### 16.6. Calendar
+Controladores: `src/controllers/Calendar/`
+Rotas: `src/routes/calendar.route.ts`
+
+Rotas para gerenciamento de reservas, check-in/out e regras.
+
+#### POST `/api/v1/calendar/reservation`
+**Descrição:** Cria uma nova reserva. Valida regras de negócio (duração min/max, limite de feriados) e debita o saldo de diárias do "pote" correto (Atual ou Futuro) de forma atômica.
+**Auth:** JWT (Role: Membro da propriedade).
+**Request Body (application/json):**
+    {
+      "idPropriedade": 1,
+      "dataInicio": "2026-01-10T00:00:00.000Z",
+      "dataFim": "2026-01-15T00:00:00.000Z",
+      "numeroHospedes": 2
+    }
+**Response 201 (application/json):**
+    {
+      "success": true,
+      "message": "Reserva criada com sucesso.",
+      "data": { ... (objeto da nova Reserva) ... }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "Sua reserva de 5 dias para 2026 excede seu saldo de 0 dias..." | Saldo insuficiente no pote do ano da reserva. |
+| 400 | "As datas selecionadas já estão ocupadas." | Conflito de datas (verificado na transação). |
+
+#### GET `/api/v1/calendar/reservation/:reservationId`
+**Descrição:** Busca os detalhes completos de uma reserva específica, incluindo checklists (check-in/out) e dados do usuário/propriedade.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `reservationId`| `number` | Sim | 1 | ID da Reserva. |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "data": { "id": 1, "status": "CONFIRMADA", "usuario": { ... }, "checklist": [ ... ] }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 404 | "Reserva não encontrada ou acesso negado." | ID não existe ou usuário não é membro. |
+
+#### DELETE `/api/v1/calendar/reservation/:reservationId`
+**Descrição:** Cancela uma reserva. Apenas o dono da reserva ou um `proprietario_master` pode cancelar. Devolve os dias ao "pote" de saldo correto (Atual ou Futuro). *Pode* criar uma `Penalidade` se o cancelamento for fora do prazo.
+**Auth:** JWT (Role: Dono da reserva ou Master).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `reservationId`| `number` | Sim | 1 | ID da Reserva. |
+**Response 200 (application/json):**
+    { "success": true, "message": "Reserva cancelada com sucesso." }
+
+#### POST `/api/v1/calendar/checkin`
+**Descrição:** Realiza o check-in de uma reserva. Apenas o dono da reserva pode fazer. Salva o estado do inventário no momento da entrada.
+**Auth:** JWT (Role: Dono da reserva).
+**Request Body (application/json):**
+    {
+      "reservationId": 1,
+      "observacoes": "Tudo ok na entrada.",
+      "itens": [
+        { "idItemInventario": 1, "estadoConservacao": "BOM", "observacao": "" },
+        { "idItemInventario": 2, "estadoConservacao": "DESGASTADO", "observacao": "Arranhado" }
+      ]
+    }
+**Response 201 (application/json):**
+    {
+      "success": true,
+      "message": "Check-in realizado com sucesso!",
+      "data": { ... (objeto do novo ChecklistInventario) ... }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "O check-in para esta reserva já foi realizado." | |
+
+#### POST `/api/v1/calendar/checkout`
+**Descrição:** Realiza o check-out de uma reserva. Apenas o dono. Salva o estado do inventário na saída e atualiza o status da reserva para `CONCLUIDA`.
+**Auth:** JWT (Role: Dono da reserva).
+**Request Body (application/json):**
+    {
+      "reservationId": 1,
+      "observacoes": "Tudo ok na saída.",
+      "itens": [
+        { "idItemInventario": 1, "estadoConservacao": "BOM", "observacao": "" }
+      ]
+    }
+**Response 201 (application/json):**
+    { "success": true, "message": "Check-out realizado e reserva concluída com sucesso!" }
+
+#### GET `/api/v1/calendar/property/:propertyId`
+**Descrição:** Lista todas as reservas (não canceladas) de uma propriedade dentro de um intervalo de datas. Usado para popular o calendário principal.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `propertyId` | `number` | Sim | 1 | ID da Propriedade. |
+**Query Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `startDate` | `string` | Sim | "2025-01-01T00:00:00Z" | Início do período da busca. |
+| `endDate` | `string` | Sim | "2025-01-31T00:00:00Z" | Fim do período da busca. |
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Reservas recuperadas com sucesso.",
+      "data": [ ... (lista de Reservas) ... ]
+    }
+
+#### PUT `/api/v1/calendar/rules/:propertyId`
+**Descrição:** (Master) Atualiza as regras de agendamento de uma propriedade (duração min/max, prazo de cancelamento, etc.).
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:**
+| Nome | Tipo | Obrigatório | Exemplo | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| `propertyId` | `number` | Sim | 1 | ID da Propriedade. |
+**Request Body (application/json):**
+    {
+      "duracaoMinimaEstadia": 2,
+      "duracaoMaximaEstadia": 10,
+      "prazoCancelamentoReserva": 30
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "A duração máxima da estadia não pode ser menor..." | Conflito de regras. |
+
+#### GET `/api/v1/calendar/property/:propertyId/upcoming`
+**Descrição:** (Membro) Lista as próximas reservas ativas de uma propriedade.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `propertyId`.
+**Query Params:** `limit`, `page`.
+
+#### GET `/api/v1/calendar/property/:propertyId/completed`
+**Descrição:** (Membro) Lista o histórico de reservas concluídas de uma propriedade.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `propertyId`.
+**Query Params:** `limit`, `page`.
+
+#### GET `/api/v1/calendar/property/:propertyId/penalties`
+**Descrição:** (Membro) Lista as penalidades ativas (`dataFim >= today`) de uma propriedade.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `propertyId`.
+**Query Params:** `limit`, `page`.
+
+### 16.7. Financial
+Controladores: `src/controllers/Financial/`
+Rotas: `src/routes/financial.route.ts`
+
+Rotas para o módulo financeiro.
+
+#### POST `/api/v1/financial/ocr-process`
+**Descrição:** Rota "Gateway" que recebe um arquivo, envia para o serviço externo de OCR (Python/Flask) e retorna os dados extraídos.
+**Auth:** JWT (Access Token).
+**Request Body (multipart/form-data):** `invoiceFile` (arquivo).
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Dados extraídos com sucesso.",
+      "data": { "valor_total": "150.75", "data_vencimento": "2025-10-30", "categoria": "Energia" }
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 502 | "O serviço de validação... está indisponível." | Erro de conexão com a API de OCR. |
+
+#### POST `/api/v1/financial/expense/manual`
+**Descrição:** (Membro) Cria uma nova despesa. Chama o `expense.service` para criar a `Despesa` e realizar o rateio (criar `PagamentoCotista`) atomicamente.
+**Auth:** JWT (Role: Membro da propriedade).
+**Request Body (multipart/form-data):**
+Campos: `idPropriedade`, `descricao`, `valor`, `dataVencimento`, `categoria`, `recorrente` (`"true"`/`"false"`), `comprovanteFile` (array de arquivos).
+**Response 201 (application/json):**
+    { "success": true, "message": "Despesa registrada e dividida...", "data": { ... } }
+
+#### GET `/api/v1/financial/expense/:expenseId`
+**Descrição:** (Membro) Busca detalhes de uma despesa, incluindo a lista de todos os `pagamentos` (rateios) e seus status.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `expenseId`.
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "data": {
+        "id": 1,
+        "descricao": "Conta de Luz",
+        "valor": 150.75,
+        "status": "PENDENTE",
+        "pagamentos": [
+          { "id": 1, "idCotista": 1, "valorDevido": 75.38, "pago": false, "cotista": { ... } },
+          { "id": 2, "idCotista": 2, "valorDevido": 75.37, "pago": false, "cotista": { ... } }
+        ],
+        "currentUserIsMaster": true
+      }
+    }
+
+#### PUT `/api/v1/financial/expense/:expenseId`
+**Descrição:** (Autor ou Master) Atualiza uma despesa. Se o `valor` for alterado, o rateio (`PagamentoCotista`) é recalculado para todos os membros.
+**Auth:** JWT (Role: Autor da despesa ou Master).
+**Path Params:** `expenseId`.
+**Request Body (multipart/form-data):** Campos de `create.Expense` + `comprovanteFile`.
+**Notas:** Remove arquivos de comprovante antigos do `FileSys` se novos forem enviados.
+
+#### PUT `/api/v1/financial/expense/:expenseId/mark-all-paid`
+**Descrição:** (Master) Ação em massa para marcar uma despesa e todos os seus rateios como `PAGO`.
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:** `expenseId`.
+**Response 200 (application/json):**
+    { "success": true, "message": "Todos os pagamentos foram marcados como pagos...", "data": { ... } }
+
+#### DELETE `/api/v1/financial/expense/:expenseId`
+**Descrição:** (Master) Cancela uma despesa. Define o status como `CANCELADO`.
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:** `expenseId`.
+**Response 200 (application/json):**
+    { "success": true, "message": "Despesa cancelada com sucesso.", "data": { ... } }
+
+#### PUT `/api/v1/financial/payment/:paymentId`
+**Descrição:** (Dono do Pagamento ou Master) Atualiza o status de um pagamento individual (ex: marca como `pago: true`). Recalcula o status agregado da `Despesa` pai.
+**Auth:** JWT (Role: Dono do `PagamentoCotista` ou Master).
+**Path Params:** `paymentId`.
+**Request Body (application/json):**
+    {
+      "pago": true
+    }
+**Response 200 (application/json):**
+    { "success": true, "message": "Status do pagamento atualizado com sucesso.", "data": { ... } }
+**Notas:** A lógica recalcula o status da `Despesa` (PENDENTE, PARCIALMENTE_PAGO, PAGO) dentro da mesma transação.
+
+#### GET `/api/v1/financial/property/:propertyId/summary`
+**Descrição:** Retorna dados agregados para o dashboard financeiro, com base em um período de datas.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `propertyId`.
+**Query Params:** `startDate`, `endDate`.
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "data": {
+        "totalSpent": 150.75,
+        "projectedSpending": 50.0,
+        "topCategory": "Energia",
+        "chartData": [
+          { "name": "Energia", "valor": 150.75 },
+          { "name": "Água", "valor": 50.0 }
+        ]
+      }
+    }
+
+#### GET `/api/v1/financial/property/:propertyId/report`
+**Descrição:** Gera e retorna um relatório financeiro em formato PDF usando `Puppeteer`.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `propertyId`.
+**Query Params:** `startDate`, `endDate`.
+**Response:** `application/pdf` (Buffer de dados do arquivo PDF).
+
+#### GET `/api/v1/financial/property/:propertyId`
+**Descrição:** (Membro) Lista todas as despesas de uma propriedade com paginação e filtros.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `propertyId`.
+**Query Params:** `limit`, `page`, `status`, `categoria`, `startDate`, `endDate`.
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Despesas recuperadas com sucesso.",
+      "data": { "despesas": [ ... ], "pagination": { ... } }
+    }
+
+### 16.8. Inventory
+Controladores: `src/controllers/Inventory/`
+Rotas: `src/routes/inventory.route.ts`
+
+Rotas para o CRUD de itens de inventário.
+
+#### POST `/api/v1/inventory/create`
+**Descrição:** (Membro) Cria um novo item de inventário para uma propriedade.
+**Auth:** JWT (Role: Membro da propriedade).
+**Request Body (application/json):**
+    {
+      "idPropriedade": 1,
+      "nome": "Cadeira de Praia",
+      "quantidade": 4,
+      "estadoConservacao": "BOM",
+      "categoria": "Móveis"
+    }
+
+#### GET `/api/v1/inventory/property/:propertyId`
+**Descrição:** (Membro) Lista os itens de inventário de uma propriedade com paginação.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `propertyId`.
+**Query Params:** `limit`, `page`.
+
+#### GET `/api/v1/inventory/:id`
+**Descrição:** (Membro) Busca os detalhes de um item de inventário específico.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `id` (ID do item).
+
+#### PUT `/api/v1/inventory/:id`
+**Descrição:** (Master) Atualiza um item de inventário.
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:** `id` (ID do item).
+**Request Body (application/json):**
+    {
+      "nome": "Cadeira de Praia (Nova)",
+      "quantidade": 5,
+      "estadoConservacao": "DESGASTADO"
+    }
+
+#### DELETE `/api/v1/inventory/:id`
+**Descrição:** (Master) Realiza um *soft delete* de um item de inventário (define `excludedAt`).
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:** `id` (ID do item).
+
+### 16.9. Inventory Photo
+Controladores: `src/controllers/InventoryPhoto/`
+Rotas: `src/routes/inventoryPhoto.route.ts`
+
+#### POST `/api/v1/inventoryPhoto/upload`
+**Descrição:** (Membro) Faz upload de uma foto para um item de inventário. Limite de 6 fotos por item.
+**Auth:** JWT (Role: Membro da propriedade).
+**Request Body (multipart/form-data):**
+    {
+      "idItemInventario": 1,
+      "photo": (arquivo de imagem)
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "Limite de 6 fotos por item atingido." | |
+
+#### DELETE `/api/v1/inventoryPhoto/:id`
+**Descrição:** (Master) Realiza um *soft delete* de uma foto de inventário (define `excludedAt`).
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:** `id` (ID da foto).
+
+### 16.10. Property Photo
+Controladores: `src/controllers/PropertyPhoto/`
+Rotas: `src/routes/propertyPhoto.route.ts`
+
+Rotas para fotos da galeria principal da propriedade.
+
+#### POST `/api/v1/propertyPhoto/upload`
+**Descrição:** (Master) Faz upload de uma foto para a galeria da propriedade.
+**Auth:** JWT (Role: `proprietario_master`).
+**Request Body (multipart/form-data):**
+    {
+      "idPropriedade": 1,
+      "foto": (arquivo de imagem)
+    }
+
+#### GET `/api/v1/propertyPhoto/:id`
+**Descrição:** (Membro) Busca uma foto específica pelo seu ID.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `id` (ID da foto).
+
+#### DELETE `/api/v1/propertyPhoto/:id`
+**Descrição:** (Master) Exclui permanentemente uma foto da propriedade (exclui o arquivo físico `fs.unlink` e o registro no DB).
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:** `id` (ID da foto).
+
+*(Rota GET / e DELETE / de Admin omitidas)*
+
+### 16.11. Property Documents
+Controladores: `src/controllers/PropertyDocuments/`
+Rotas: `src/routes/propertyDocuments.route.ts`
+
+Rotas para documentos da propriedade (ex: escritura).
+
+#### POST `/api/v1/propertyDocuments/upload`
+**Descrição:** (Master) Faz upload de um documento (PDF/Imagem) para uma propriedade.
+**Auth:** JWT (Role: `proprietario_master`).
+**Request Body (multipart/form-data):**
+    {
+      "idPropriedade": 1,
+      "tipoDocumento": "Escritura",
+      "documento": (arquivo PDF/imagem)
+    }
+
+#### GET `/api/v1/propertyDocuments/:id`
+**Descrição:** (Membro) Busca um documento específico pelo seu ID.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `id` (ID do documento).
+
+#### DELETE `/api/v1/propertyDocuments/:id`
+**Descrição:** (Master) Exclui permanentemente um documento da propriedade (exclui o arquivo físico `fs.unlink` e o registro no DB).
+**Auth:** JWT (Role: `proprietario_master`).
+**Path Params:** `id` (ID do documento).
+
+*(Rota GET / de Admin omitida)*
+
+### 16.12. Notification
+Controladores: `src/controllers/Notification/`
+Rotas: `src/routes/notification.route.ts`
+
+#### GET `/api/v1/notification/property/:propertyId`
+**Descrição:** (Membro) Lista as notificações de uma propriedade, com paginação.
+**Auth:** JWT (Role: Membro da propriedade).
+**Path Params:** `propertyId`.
+**Query Params:** `limit`, `page`.
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "data": [
+        {
+          "id": 1,
+          "mensagem": "O usuário 'Master da Silva' adicionou uma nova foto...",
+          "createdAt": "2025-10-20T10:00:00.000Z",
+          "autor": { "id": 1, "nomeCompleto": "Master da Silva" },
+          "lidaPor": [ { "id": 1 }, { "id": 2 } ]
+        }
+      ],
+      "pagination": { ... }
+    }
+
+#### PUT `/api/v1/notification/read`
+**Descrição:** (Usuário) Marca um array de notificações como lidas para o usuário autenticado.
+**Auth:** JWT (Access Token).
+**Request Body (application/json):**
+    {
+      "notificationIds": [1, 2, 3]
+    }
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "Notificações marcadas como lidas com sucesso."
+    }
+
+### 16.13. Validation
+Controladores: `src/controllers/Validation/`
+Rotas: `src/routes/validation.route.ts`
+
+#### POST `/api/v1/validation/address`
+**Descrição:** (Usuário) Rota "Gateway" que recebe um PDF de comprovante de endereço e dados de texto, envia ao serviço de OCR (Python/Flask) para análise e retorna o resultado da validação.
+**Auth:** JWT (Access Token).
+**Request Body (multipart/form-data):**
+    {
+      "documento": (arquivo PDF),
+      "address": "Rua Principal, 100",
+      "cep": "12345678"
+    }
+**Response 200 (application/json):**
+    {
+      "success": true,
+      "message": "O documento valida o endereço fornecido."
+    }
+**Erros comuns:**
+| Código | Mensagem | Causa / Observações |
+| :--- | :--- | :--- |
+| 400 | "Formato de arquivo inválido. Apenas PDFs..." | `multer` rejeitou o arquivo. |
+| 502 | "O serviço de validação de documentos está indisponível." | Erro de conexão com a API de OCR. |
+| 400 | "O endereço não pôde ser validado..." | Resposta do serviço de OCR indicando falha na validação. |
+
+
+
