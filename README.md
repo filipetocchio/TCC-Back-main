@@ -689,3 +689,38 @@ Entidade que armazena o rateio individual de uma despesa para um cotista especí
 | `pago` | `Boolean` | Status do pagamento individual. |
 | `@@unique([idDespesa, idCotista])` | N/A | Restrição que impede o mesmo cotista de ter dois rateios para a mesma despesa. |
 
+
+
+
+## 15. Jobs Agendados (Cron)
+
+A API utiliza o pacote `node-cron` para agendar e executar tarefas de manutenção críticas de forma automática. As tarefas são configuradas e iniciadas no arquivo principal do servidor (`src/server.ts`).
+
+### 15.1. Renovação Anual de Saldos de Diárias
+
+* **Arquivo:** `src/jobs/resetDailyBalances.job.ts`
+* **Agendamento:** `0 0 1 1 *` (À meia-noite do dia 1º de Janeiro).
+* **Fuso Horário:** `America/Sao_Paulo`
+* **Descrição:** Este é o job mais crítico para a lógica de negócio de "dois potes". Ele executa a "rolagem" (rollover) anual dos saldos de todos os cotistas do sistema:
+    1.  O `saldoDiariasAtual` do cotista é substituído pelo valor do seu `saldoDiariasFuturo` (que já contém os débitos de reservas feitas antecipadamente para o novo ano).
+    2.  O `saldoDiariasFuturo` é então recalculado do zero, recebendo o valor integral ao qual o cotista tem direito com base no seu `numeroDeFracoes * diariasPorFracao`.
+
+### 15.2. Geração de Despesas Recorrentes
+
+* **Arquivo:** `src/jobs/createRecurringExpenses.job.ts`
+* **Agendamento:** `0 2 * * *` (Às 02:00 da manhã, diariamente).
+* **Fuso Horário:** `America/Sao_Paulo`
+* **Descrição:** Este job automatiza o lançamento de despesas fixas.
+    1.  Ele busca todas as despesas "modelo" (templates) que estão marcadas com `recorrente: true`.
+    2.  Verifica a `frequencia` (ex: `MENSAL`, `ANUAL`) e o `diaRecorrencia` de cada template.
+    3.  Se a data de hoje corresponder à regra, ele cria uma nova instância dessa despesa e chama o `createExpenseWithPayments` para gerar o rateio (os `PagamentoCotista`) para todos os membros.
+
+### 15.3. Atualização de Despesas Vencidas
+
+* **Arquivo:** `src/jobs/updateOverdueExpenses.job.ts`
+* **Agendamento:** `0 1 * * *` (Às 01:00 da manhã, diariamente).
+* **Fuso Horário:** `America/Sao_Paulo`
+* **Descrição:** Este job é responsável por manter a integridade do módulo financeiro.
+    1.  Ele busca todas as despesas que estão com status `PENDENTE` ou `PARCIALMENTE_PAGO` e cuja `dataVencimento` é anterior ao dia atual.
+    2.  Atualiza o status de todas essas despesas para `ATRASADO` usando uma operação em massa (`prisma.despesa.updateMany`).
+    3.  Dispara notificações "fire-and-forget" para as propriedades afetadas.
