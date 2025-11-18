@@ -410,3 +410,72 @@ Este comando monitora alterações nos arquivos de código e de teste, executand
 npm run test:watch
 ```
 
+
+
+
+## 11. CI / CD (Integração e Implantação Contínua)
+
+O projeto utiliza **GitHub Actions** para Integração Contínua (CI). A configuração está definida no arquivo `.github/workflows/ci.yml`.
+
+### 11.1. Gatilhos (Triggers)
+
+O pipeline de CI é acionado automaticamente nos seguintes eventos:
+* **`push`**: Em qualquer push para o branch `main`.
+* **`pull_request`**: Na abertura ou atualização de um pull request direcionado ao branch `main`.
+
+### 11.2. Etapas do Pipeline (`jobs: backend-ci`)
+
+O job é executado em um ambiente `ubuntu-latest` e segue os seguintes passos para garantir a integridade do código:
+
+1.  **Checkout:** Clona o repositório para o *runner* do GitHub.
+    ```bash
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    ```
+
+2.  **Setup Node.js:** Configura o ambiente de execução para Node.js v20, com cache de dependências `npm` ativado.
+    ```bash
+    - name: Setup Node.js environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    ```
+
+3.  **Install System Dependencies:** Instala as bibliotecas de sistema necessárias para o Prisma e SQLite no runner Ubuntu.
+    ```bash
+    - name: Install System Dependencies for Prisma
+      run: sudo apt-get update && sudo apt-get install -y sqlite3 libsqlite3-dev
+    ```
+
+4.  **Install Project Dependencies:** Instala os pacotes do projeto usando `npm ci` (Instalação limpa), que é mais rápido e seguro para CI do que `npm install`.
+    ```bash
+    - name: Install Project Dependencies
+      run: npm ci
+    ```
+
+5.  **Generate Prisma Client:** Gera o cliente Prisma com base no schema.
+    ```bash
+    - name: Generate Prisma Client
+      run: npx prisma generate
+    ```
+
+6.  **Run Prisma Migrations:** Executa as migrações do banco de dados em um ambiente de teste, utilizando um banco de dados definido nos *secrets* do GitHub.
+    ```bash
+    - name: Run Prisma Migrations
+      run: npx prisma migrate deploy
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }} 
+    ```
+
+7.  **Run Automated Tests:** Executa a suíte de testes completa (`npm test`) com o Jest. Esta etapa também requer os *secrets* do GitHub para simular o ambiente de produção.
+    ```bash
+    - name: Run Automated Tests
+      run: npm test
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+        ACCESS_TOKEN_SECRET: ${{ secrets.ACCESS_TOKEN_SECRET_TEST }}
+        REFRESH_TOKEN_SECRET: ${{ secrets.REFRESH_TOKEN_SECRET_TEST }}
+    ```
+
+
