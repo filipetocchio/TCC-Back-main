@@ -597,3 +597,95 @@ O controle de acesso é aplicado em múltiplas camadas:
 * **Upload de Arquivos:** O `Multer` (`upload.ts`) é configurado com filtros de tipo de arquivo (`fileFilter`) e limites de tamanho para prevenir o upload de arquivos maliciosos ou excessivamente grandes.
 
 
+
+
+
+
+
+## 14. Modelos de Dados (Schema Prisma)
+
+A estrutura completa do banco de dados, os relacionamentos e as restrições são definidos em um único arquivo: `prisma/schema.prisma`. Este schema é a "fonte única da verdade" (Single Source of Truth) para os dados, a partir do qual o Prisma gera o cliente e as tipagens TypeScript.
+
+Abaixo estão as entidades (models) centrais que definem a lógica de negócio do QOTA.
+
+### 14.1. User
+Representa um usuário global da plataforma.
+| Campo | Tipo (Prisma) | Descrição |
+| :--- | :--- | :--- |
+| `id` | `Int` | Chave Primária (PK), Auto-incremento. |
+| `email` | `String` | Único. Usado para login. |
+| `password` | `String` | Armazena o hash `bcrypt` da senha. |
+| `nomeCompleto` | `String` | Nome de exibição do usuário. |
+| `cpf` | `String` | Único. Documento do usuário. |
+| `refreshToken` | `String?` | Armazena o Refresh Token JWT para persistência da sessão. |
+| `excludedAt` | `DateTime?` | Usado para *soft delete* e anonimização (LGPD). |
+| `propriedades` | `UsuariosPropriedades[]` | Relação N:N com `Propriedades` (via `UsuariosPropriedades`). |
+| `reservas` | `Reserva[]` | Relação 1:N com `Reserva`. |
+| `pagamentos` | `PagamentoCotista[]` | Relação 1:N com `PagamentoCotista`. |
+
+### 14.2. Propriedades
+Representa uma propriedade gerenciada.
+| Campo | Tipo (Prisma) | Descrição |
+| :--- | :--- | :--- |
+| `id` | `Int` | PK, Auto-incremento. |
+| `nomePropriedade` | `String` | Nome de exibição da propriedade. |
+| `totalFracoes` | `Int` | O número total de cotas (ex: 52). |
+| `diariasPorFracao` | `Float` | Valor calculado (365 / `totalFracoes`). |
+| `prazoCancelamentoReserva` | `Int` | Regra de negócio (em dias). |
+| `limiteFeriadosPorCotista` | `Int?` | Regra de negócio. |
+| `limiteReservasAtivasPorCotista` | `Int?` | Regra de negócio. |
+| `excludedAt` | `DateTime?` | Usado para *soft delete* da propriedade. |
+| `usuarios` | `UsuariosPropriedades[]` | Relação N:N com `User` (via `UsuariosPropriedades`). |
+| `reservas` | `Reserva[]` | Relação 1:N com `Reserva`. |
+| `despesas` | `Despesa[]` | Relação 1:N com `Despesa`. |
+
+### 14.3. UsuariosPropriedades (O Vínculo)
+Esta é a tabela associativa (pivot table) mais importante do sistema, que armazena a permissão e os saldos de cada usuário para cada propriedade.
+
+| Campo | Tipo (Prisma) | Descrição |
+| :--- | :--- | :--- |
+| `id` | `Int` | PK, Auto-incremento. |
+| `idUsuario` | `Int` | Chave Estrangeira (FK) para `User`. |
+| `idPropriedade` | `Int` | Chave Estrangeira (FK) para `Propriedades`. |
+| `permissao` | `String` | "proprietario_master" ou "proprietario_comum". |
+| `numeroDeFracoes` | `Int` | Quantidade de cotas que o usuário possui. |
+| `saldoDiariasAtual`| `Float` | **Saldo pro-rata** para o ano corrente. |
+| `saldoDiariasFuturo` | `Float` | **Saldo integral** para o próximo ano. |
+| `@@unique([idUsuario, idPropriedade])` | N/A | Restrição que impede o mesmo usuário de se vincular duas vezes à mesma propriedade. |
+
+### 14.4. Reserva
+Entidade que armazena um agendamento no calendário.
+| Campo | Tipo (Prisma) | Descrição |
+| :--- | :--- | :--- |
+| `id` | `Int` | PK, Auto-incremento. |
+| `idPropriedade` | `Int` | FK para `Propriedades`. |
+| `idUsuario` | `Int` | FK para `User` (o dono da reserva). |
+| `dataInicio` | `DateTime` | Início da estadia. |
+| `dataFim` | `DateTime` | Fim da estadia. |
+| `status` | `StatusReserva` | Enum: `CONFIRMADA`, `CONCLUIDA`, `CANCELADA`. |
+| `checklist` | `ChecklistInventario[]` | Relação 1:N com `ChecklistInventario`. |
+
+### 14.5. Despesa
+Entidade para registros financeiros. Pode ser um "template" (se `recorrente = true`) ou uma instância (se `recorrenciaPaiId != null`).
+| Campo | Tipo (Prisma) | Descrição |
+| :--- | :--- | :--- |
+| `id` | `Int` | PK, Auto-incremento. |
+| `idPropriedade` | `Int` | FK para `Propriedades`. |
+| `criadoPorId` | `Int` | FK para `User` (quem registrou). |
+| `recorrenciaPaiId` | `Int?` | FK para `Despesa` (auto-relacionamento). |
+| `valor` | `Float` | Valor total da despesa. |
+| `status` | `StatusPagamento` | Enum: `PENDENTE`, `PAGO`, `ATRASADO`, etc. |
+| `recorrente` | `Boolean` | Flag que define se esta é uma despesa "modelo" para o Job. |
+| `pagamentos` | `PagamentoCotista[]`| Relação 1:N com os rateios. |
+
+### 14.6. PagamentoCotista
+Entidade que armazena o rateio individual de uma despesa para um cotista específico.
+| Campo | Tipo (Prisma) | Descrição |
+| :--- | :--- | :--- |
+| `id` | `Int` | PK, Auto-incremento. |
+| `idDespesa` | `Int` | FK para `Despesa`. |
+| `idCotista` | `Int` | FK para `User`. |
+| `valorDevido` | `Float` | Valor calculado (`valorDespesa` * `proporcaoFracoes`). |
+| `pago` | `Boolean` | Status do pagamento individual. |
+| `@@unique([idDespesa, idCotista])` | N/A | Restrição que impede o mesmo cotista de ter dois rateios para a mesma despesa. |
+
