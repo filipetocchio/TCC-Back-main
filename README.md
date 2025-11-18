@@ -518,3 +518,82 @@ O sistema é configurado para gerar diferentes arquivos de log com base no conte
 
 No estado atual da aplicação, o monitoramento é realizado através da **análise e observação direta dos arquivos de log gerados**. Não há integração nativa com serviços de monitoramento de performance de aplicação (APM) como Sentry ou Datadog. A observação do `errLog.txt` é a principal forma de identificar falhas em tempo real.
 
+
+
+
+
+## 13. Segurança e Autenticação
+
+A segurança da API QOTA é construída sobre padrões modernos de autenticação *stateless* (sem estado), autorização granular e proteção de dados em trânsito e em repouso. A arquitetura segue o princípio de "defesa em profundidade", onde várias camadas de segurança são aplicadas.
+
+
+### 13.1. Estratégia de Tokens (JWT)
+
+O sistema utiliza uma estratégia de **Dual-Token** para equilibrar segurança e experiência do usuário, baseada nos arquivos `login.Auth.controller.ts` e `refreshToken.Auth.controller.ts`:
+
+1.  **Access Token (Curta Duração):**
+    * **Formato:** JSON Web Token (JWT) assinado com `ACCESS_TOKEN_SECRET`.
+    * **Validade:** 6 horas (definido no `login.Auth.controller.ts`).
+    * **Transporte:** Header HTTP `Authorization: Bearer <token>`.
+    * **Conteúdo (Payload):** `{ "userId": 1, "email": "...", "nomeCompleto": "..." }`.
+    * **Uso:** Autenticação de requisições de API imediatas. É *stateless* e verificado pelo middleware `protect` (`authMiddleware.ts`).
+
+2.  **Refresh Token (Longa Duração):**
+    * **Formato:** JWT assinado com `REFRESH_TOKEN_SECRET`.
+    * **Validade:** 7 dias (definido no `login.Auth.controller.ts`).
+    * **Transporte:** Cookie HTTP-Only (`jwt`).
+    * **Segurança:**
+        * `httpOnly: true`: O token é inacessível por JavaScript no navegador, prevenindo roubo via ataques XSS.
+        * `secure: true`: (Em produção) Garante que o cookie só seja enviado via HTTPS.
+        * `sameSite: 'lax'`: Oferece proteção contra ataques CSRF.
+    * **Uso:** Obtenção silenciosa de novos Access Tokens através da rota `/auth/refresh`.
+    * **Invalidação:** O token é armazenado no banco de dados (`User.refreshToken`). No logout, ele é setado para `null`, invalidando a sessão no lado do servidor.
+
+### 13.2. Fluxos de Autenticação
+
+* **Login (`/auth/login`):**
+    1.  Valida credenciais com `bcrypt.compare`.
+    2.  Gera um novo Access Token e um novo Refresh Token.
+    3.  Salva o hash do Refresh Token no `User.refreshToken` (invalidando sessões anteriores).
+    4.  Envia o Access Token no corpo da resposta JSON.
+    5.  Envia o Refresh Token no cookie `jwt`.
+
+* **Refresh (`/auth/refresh`):**
+    1.  O cliente envia o cookie `jwt` (o Refresh Token).
+    2.  O servidor verifica se o token é válido e se ele existe no `User.refreshToken`.
+    3.  Se sim, gera um **novo Access Token** e o retorna no corpo da resposta. O Refresh Token não é alterado.
+
+* **Logout (`/auth/logout`):**
+    1.  O servidor (protegido por JWT) recebe a requisição.
+    2.  Define `User.refreshToken` como `null` no banco de dados, invalidando o token no lado do servidor.
+    3.  Envia o comando `res.clearCookie('jwt')` para o cliente.
+
+### 13.3. Controle de Acesso (Autorização)
+
+O controle de acesso é aplicado em múltiplas camadas:
+
+1.  **Nível de Rota (Autenticação):**
+
+    * O middleware `protect` (`authMiddleware.ts`) é aplicado a todas as rotas privadas. Ele valida o Access Token (enviado via Header `Authorization`) e anexa `req.user` à requisição.
+
+2.  **Nível de Rota (Administrativo):**
+
+    * O middleware `verifyRoles` (`verifyRoles.ts`) é usado para rotas de superusuário (ex: `GET /user`), restringindo o acesso com base no `ROLES_LIST.Admin`.
+
+3.  **Nível de Recurso (Lógica no Controller):**
+
+    * Esta é a principal forma de autorização de negócios. Os controllers verificam o `req.user.id` contra o recurso solicitado (ex: `requesterId === targetUserId` no `update.User.controller`).
+
+    * A permissão de gestão é verificada consultando o vínculo `UsuariosPropriedades` (ex: `permissao: 'proprietario_master'`). Isso é usado em dezenas de controllers (`update.Property`, `unlinkMember.Permission`, `cancel.Expense`, etc.).
+
+### 13.4. Proteção de Dados e Validação
+
+* **Validação de Entrada:** Todas as requisições que chegam à API (body, params, query) são rigorosamente validadas pelo `Zod`. O `errorHandler` captura `ZodError` e retorna uma resposta 400 padronizada, impedindo que dados malformados cheguem à lógica de negócio.
+
+* **Hashing de Senha:** Senhas nunca são armazenadas em texto plano. O `bcrypt` (com 10 rounds de salt) é usado para criar hashes irreversíveis.
+
+* **Prevenção de SQL Injection:** O uso exclusivo do **Prisma ORM** garante que todas as consultas ao banco de dados sejam parametrizadas e sanitizadas, eliminando o risco de injeção de SQL.
+
+* **Upload de Arquivos:** O `Multer` (`upload.ts`) é configurado com filtros de tipo de arquivo (`fileFilter`) e limites de tamanho para prevenir o upload de arquivos maliciosos ou excessivamente grandes.
+
+
