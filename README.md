@@ -333,3 +333,51 @@ npx prisma studio
 
 O Studio abrirá automaticamente no seu navegador, permitindo a manipulação direta dos dados nas tabelas (User, Propriedades, Reserva, etc.).
 
+
+
+
+## 9. Executando Localmente
+
+A aplicação está configurada para ser executada em dois modos principais: desenvolvimento (com hot-reload) e produção (compilado).
+
+
+### 9.1. Modo de Desenvolvimento
+
+Este modo utiliza o `nodemon` e o `ts-node` para monitorar alterações nos arquivos (`.ts`) e reiniciar o servidor automaticamente, agilizando o desenvolvimento.
+
+Para iniciar o servidor em modo de desenvolvimento, execute:
+
+```bash
+# Este comando aciona o nodemon, que por sua vez executa o ts-node
+npm run dev
+```
+
+>  **Nota:** Após a execução, o servidor estará disponível no `http://localhost:8001` (ou na porta definida em seu arquivo .env).
+
+
+
+### 9.2. Modo de Produção
+
+Este modo transpila o código `TypeScript` para `JavaScript` puro (na pasta /dist) e o executa diretamente com o Node.`js`, oferecendo a melhor performance.
+
+
+
+**Compilar o Projeto:**
+
+```Bash
+# Transpila todo o código TypeScript (tsc) para JavaScript (na pasta /dist)
+npm run build
+```
+
+
+
+**Iniciar o Servidor:**
+
+```Bash
+
+# Executa o script de inicialização do servidor transpilado
+npm start
+
+```
+
+
