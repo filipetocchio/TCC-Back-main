@@ -1701,3 +1701,61 @@ Rotas: `src/routes/validation.route.ts`
 
 
 
+
+
+## 17. Contribuindo
+
+Agradecemos o interesse em contribuir para o QOTA! Para garantir a qualidade e a consistência do código, pedimos que siga as diretrizes abaixo.
+
+### 17.1. Padrão de Commits
+
+O projeto utiliza o padrão **Conventional Commits**. Isso é essencial para manter o histórico do Git limpo e futuramente automatizar a geração de changelogs.
+
+**Formato:** `<tipo>(<escopo>): <descrição curta>`
+
+* **Tipos Comuns:**
+    * `feat`: Uma nova funcionalidade (ex: `feat(financial): Adiciona rota de relatório PDF`).
+    * `fix`: Uma correção de bug (ex: `fix(calendar): Corrige débito de saldo pro-rata`).
+    * `docs`: Alterações apenas na documentação (ex: `docs(readme): Atualiza seção de API`).
+    * `style`: Mudanças de formatação, lint, etc. (sem alteração lógica).
+    * `refactor`: Refatoração de código sem mudança de funcionalidade.
+    * `test`: Adição ou correção de testes.
+    * `chore`: Manutenção de build, scripts, CI/CD, etc.
+
+* **Exemplo de Commit:**
+    ```bash
+    git commit -m "fix(permission): Bloqueia promoção de cotista com 0 frações a master" -m "Adiciona validação no update.Permission.controller para impedir que um usuário com numeroDeFracoes=0 seja definido como 'proprietario_master'."
+    ```
+
+### 17.2. Fluxo de Trabalho (Branching Model)
+
+Utilizamos um fluxo baseado em *feature branches*. A branch `main` é protegida e contém o código de produção estável.
+
+1.  **Crie uma Nova Branch:** A partir da `main`, crie uma branch descritiva.
+    ```bash
+    # Exemplo:
+    git checkout -b feature/login-google-sso
+    git checkout -b fix/bug-calculo-saldo-futuro
+    ```
+
+2.  **Desenvolva e Commite:** Faça suas alterações e commite usando o padrão convencional.
+
+3.  **Execute os Testes Localmente:** Antes de enviar, garanta que todos os testes estão passando.
+    ```bash
+    npm test
+    ```
+
+4.  **Faça o Push:** Envie sua branch para o repositório remoto.
+    ```bash
+    git push origin feature/login-google-sso
+    ```
+
+5.  **Abra um Pull Request (PR):** Abra um PR da sua *feature branch* para a branch `main`. Descreva o que foi feito e por quê.
+
+6.  **Revisão de Código:** O PR será revisado pela equipe. A pipeline de CI do GitHub Actions deve passar com sucesso antes do *merge*.
+
+
+
+## 18. Licença
+
+Todos os direitos autorais são reservados pelo QOTA.
