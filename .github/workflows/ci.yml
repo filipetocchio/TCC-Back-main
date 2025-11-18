@@ -29,9 +29,13 @@ jobs:
 
       - name: Install Project Dependencies
         run: npm ci
+        env:
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: "1"
 
       - name: Generate Prisma Client
         run: npx prisma generate
+        env:
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: "1"
 
       - name: Run Prisma Migrations
         run: npx prisma migrate deploy
