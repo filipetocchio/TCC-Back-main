@@ -479,3 +479,42 @@ O job é executado em um ambiente `ubuntu-latest` e segue os seguintes passos pa
     ```
 
 
+
+
+## 12. Logging e Monitoramento
+
+A API implementa uma estratégia de logging robusta baseada em arquivos, centralizada no módulo `src/middleware/logEvents.ts`. Esta abordagem permite a rastreabilidade de requisições, o monitoramento de erros e a auditoria de processos críticos.
+
+### 12.1. Mecanismo de Log
+
+A função utilitária `logEvents` é o núcleo do sistema de logging. Ela formata cada mensagem com:
+* Timestamp (`yyyyMMdd\tHH:mm:ss`)
+* Um ID de evento único (`uuid`)
+* A mensagem de log
+
+Essas entradas são anexadas de forma assíncrona (`fs.promises.appendFile`) aos arquivos de log correspondentes no diretório `/logs` (o diretório é criado se não existir).
+
+### 12.2. Tipos de Logs Gerados
+
+O sistema é configurado para gerar diferentes arquivos de log com base no contexto, permitindo uma depuração e monitoramento eficientes:
+
+* **`logs/reqLog.txt`:**
+    * **Fonte:** Middleware `logger` (`logEvents.ts`).
+    * **Conteúdo:** Registra **todas** as requisições HTTP recebidas pela API, incluindo método, origem e URL. Essencial para rastrear o tráfego.
+
+* **`logs/errLog.txt`:**
+    * **Fonte:** Middleware `errorHandler` (`errorHandler.ts`).
+    * **Conteúdo:** Captura **todos** os erros não tratados da aplicação (erros 500), erros de validação do Zod e erros do Prisma, incluindo o stack trace completo. Este é o log principal para monitoramento de falhas.
+
+* **`logs/cron.log`:**
+    * **Fonte:** Todos os Jobs em `src/jobs/`.
+    * **Conteúdo:** Registra o início, a conclusão bem-sucedida ou falhas críticas dos processos agendados (ex: `runResetDailyBalancesJob`).
+
+* **Logs Específicos de Módulo (ex: `financial.log`, `auth.log`, `inventory.log`):**
+    * **Fonte:** Controllers específicos.
+    * **Conteúdo:** Os controllers registram erros de lógica de negócio ou falhas específicas de seus domínios (ex: falha ao criar notificação, erro ao processar OCR).
+
+### 12.3. Monitoramento
+
+No estado atual da aplicação, o monitoramento é realizado através da **análise e observação direta dos arquivos de log gerados**. Não há integração nativa com serviços de monitoramento de performance de aplicação (APM) como Sentry ou Datadog. A observação do `errLog.txt` é a principal forma de identificar falhas em tempo real.
+
