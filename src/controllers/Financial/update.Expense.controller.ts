@@ -38,6 +38,7 @@ const updateExpenseSchema = z.object({
   recorrente: z.string().transform(val => val === 'true'),
   frequencia: z.string().optional(),
   diaRecorrencia: z.coerce.number().int().optional(),
+  existingComprovantes: z.union([z.string(), z.array(z.string())]).optional(),
 });
 
 /**
@@ -74,19 +75,37 @@ export const updateExpense = async (req: Request, res: Response) => {
     if (!isAuthor && !isMaster) {
       return res.status(403).json({ success: false, message: "Acesso negado. Você não tem permissão para editar esta despesa." });
     }
+
+    // Preparação dos Comprovantes: Mescla antigos mantidos com novos uploads.
+    let listaFinalComprovantes: string[] = [];
+
+    // 1. Processa arquivos antigos mantidos
+    if (validatedData.existingComprovantes) {
+      if (Array.isArray(validatedData.existingComprovantes)) {
+        listaFinalComprovantes = [...validatedData.existingComprovantes];
+      } else {
+        listaFinalComprovantes = [validatedData.existingComprovantes];
+      }
+    }
+
+    // 2. Adiciona novos arquivos do upload atual
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      const novosCaminhos = (req.files as Express.Multer.File[]).map(file => `/uploads/invoices/${file.filename}`);
+      listaFinalComprovantes = [...listaFinalComprovantes, ...novosCaminhos];
+    }
+
+    const urlComprovanteString = listaFinalComprovantes.length > 0 ? listaFinalComprovantes.join(',') : null;
     
     // --- 4. Execução da Lógica Transacional de Atualização ---
     const updatedExpense = await prisma.$transaction(async (tx: TransactionClient) => {
       // 4.1. Atualiza os dados principais da despesa
-      const novosComprovantes = req.files && Array.isArray(req.files) && req.files.length > 0
-          ? (req.files as Express.Multer.File[]).map(file => `/uploads/invoices/${file.filename}`).join(',')
-          : undefined;
+      const { existingComprovantes, ...dadosParaBanco } = validatedData;
 
       const despesaAtualizada = await tx.despesa.update({
         where: { id: Number(expenseId) },
         data: {
-          ...validatedData,
-          urlComprovante: novosComprovantes,
+          ...dadosParaBanco,
+          urlComprovante: urlComprovanteString,
           dataVencimento: new Date(validatedData.dataVencimento),
         },
       });
@@ -102,24 +121,27 @@ export const updateExpense = async (req: Request, res: Response) => {
             if (totalFracoes === 0) throw new Error("A propriedade não possui um total de frações definido para o rateio.");
 
             let valorTotalDistribuido = 0;
-            const pagamentosParaAtualizar = cotistas.map(cotista => {
+            
+            // Mapeia e calcula o novo valor para cada cotista
+            const pagamentosParaAtualizar = cotistas.map((cotista: any) => {
               const proporcao = cotista.numeroDeFracoes / totalFracoes;
               const novoValorDevido = parseFloat((validatedData.valor * proporcao).toFixed(2));
               valorTotalDistribuido += novoValorDevido;
               return { idCotista: cotista.idUsuario, novoValorDevido };
             });
 
+            // Ajusta eventual diferença de centavos no cotista Master
             const diferenca = parseFloat((validatedData.valor - valorTotalDistribuido).toFixed(2));
             if (diferenca !== 0) {
-              const master = cotistas.find(c => c.permissao === 'proprietario_master') || cotistas[0];
-              const pagamentoDoMaster = pagamentosParaAtualizar.find(p => p.idCotista === master.idUsuario);
+              const master = cotistas.find((c: any) => c.permissao === 'proprietario_master') || cotistas[0];
+              const pagamentoDoMaster = pagamentosParaAtualizar.find((p: { idCotista: number, novoValorDevido: number }) => p.idCotista === master.idUsuario);
               if (pagamentoDoMaster) {
                 pagamentoDoMaster.novoValorDevido = parseFloat((pagamentoDoMaster.novoValorDevido + diferenca).toFixed(2));
               }
             }
             
-            // Executa todas as atualizações de pagamento em paralelo (Desempenho)
-            const updatePromises = pagamentosParaAtualizar.map(p => 
+            // Executa as atualizações no banco
+            const updatePromises = pagamentosParaAtualizar.map((p: { idCotista: number, novoValorDevido: number }) => 
               tx.pagamentoCotista.updateMany({
                 where: { idDespesa: despesaAtualizada.id, idCotista: p.idCotista },
                 data: { valorDevido: p.novoValorDevido },
@@ -132,21 +154,24 @@ export const updateExpense = async (req: Request, res: Response) => {
       return despesaAtualizada;
     });
 
-    // --- 5. Gerenciamento de Arquivos Antigos (Pós-Transação) ---
-    const foramEnviadosNovosArquivos = req.files && Array.isArray(req.files) && req.files.length > 0;
-    if (foramEnviadosNovosArquivos && despesaOriginal.urlComprovante) {
-      const caminhosAntigos = despesaOriginal.urlComprovante.split(',');
-      const deleteFilePromises = caminhosAntigos.map(caminho => {
-        const fullPath = path.join(__dirname, '../../..', caminho);
-        return fs.unlink(fullPath).catch(err => ({ error: err, path: fullPath }));
-      });
+    // --- 5. Limpeza de Arquivos Obsoletos (Pós-Transação) ---
+    if (despesaOriginal.urlComprovante) {
+      const arquivosOriginais = despesaOriginal.urlComprovante.split(',');
+      const arquivosParaDeletar = arquivosOriginais.filter((arq: string) => !listaFinalComprovantes.includes(arq));
 
-      const results = await Promise.allSettled(deleteFilePromises);
-      results.forEach(result => {
-        if (result.status === 'rejected' && result.reason.error.code !== 'ENOENT') {
-            logEvents(`Falha ao apagar arquivo antigo: ${result.reason.path}`, LOG_FILE);
-        }
-      });
+      if (arquivosParaDeletar.length > 0) {
+        const deleteFilePromises = arquivosParaDeletar.map((caminho: string) => {
+          const fullPath = path.join(__dirname, '../../..', caminho);
+          return fs.unlink(fullPath).catch(err => ({ error: err, path: fullPath }));
+        });
+
+        const results = await Promise.allSettled(deleteFilePromises);
+        results.forEach(result => {
+          if (result.status === 'rejected' && result.reason.error.code !== 'ENOENT') {
+            logEvents(`Falha ao apagar arquivo obsoleto: ${result.reason.path}`, LOG_FILE);
+          }
+        });
+      }
     }
 
     // --- 6. Disparo da Notificação (Desempenho) ---
